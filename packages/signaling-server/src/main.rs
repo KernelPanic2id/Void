@@ -27,27 +27,32 @@ struct PeerSession {
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 enum ClientMessage {
+    #[serde(rename_all = "camelCase")]
     Join {
         channel_id: String,
         user_id: String,
         username: String,
     },
+    #[serde(rename_all = "camelCase")]
     Leave {
         channel_id: String,
         user_id: String,
     },
+    #[serde(rename_all = "camelCase")]
     Offer {
         channel_id: String,
         from: String,
         to: String,
         sdp: serde_json::Value,
     },
+    #[serde(rename_all = "camelCase")]
     Answer {
         channel_id: String,
         from: String,
         to: String,
         sdp: serde_json::Value,
     },
+    #[serde(rename_all = "camelCase")]
     Ice {
         channel_id: String,
         from: String,
@@ -59,30 +64,36 @@ enum ClientMessage {
 #[derive(Debug, Serialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
 enum ServerMessage {
+    #[serde(rename_all = "camelCase")]
     Joined {
         channel_id: String,
         peers: Vec<PeerInfo>,
     },
+    #[serde(rename_all = "camelCase")]
     PeerJoined {
         channel_id: String,
         peer: PeerInfo,
     },
+    #[serde(rename_all = "camelCase")]
     PeerLeft {
         channel_id: String,
         user_id: String,
     },
+    #[serde(rename_all = "camelCase")]
     Offer {
         channel_id: String,
         from: String,
         from_username: String,
         sdp: serde_json::Value,
     },
+    #[serde(rename_all = "camelCase")]
     Answer {
         channel_id: String,
         from: String,
         from_username: String,
         sdp: serde_json::Value,
     },
+    #[serde(rename_all = "camelCase")]
     Ice {
         channel_id: String,
         from: String,
@@ -95,6 +106,7 @@ enum ServerMessage {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct PeerInfo {
     user_id: String,
     username: String,
