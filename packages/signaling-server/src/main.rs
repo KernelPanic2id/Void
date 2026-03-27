@@ -59,6 +59,13 @@ enum ClientMessage {
         to: String,
         candidate: serde_json::Value,
     },
+    #[serde(rename_all = "camelCase")]
+    MediaState {
+        channel_id: String,
+        user_id: String,
+        is_muted: bool,
+        is_deafened: bool,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -99,6 +106,13 @@ enum ServerMessage {
         from: String,
         from_username: String,
         candidate: serde_json::Value,
+    },
+    #[serde(rename_all = "camelCase")]
+    PeerState {
+        channel_id: String,
+        user_id: String,
+        is_muted: bool,
+        is_deafened: bool,
     },
     Error {
         message: String,
@@ -408,6 +422,25 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         from_username,
                         candidate,
                     },
+                )
+                .await;
+            }
+            ClientMessage::MediaState {
+                channel_id,
+                user_id,
+                is_muted,
+                is_deafened,
+            } => {
+                broadcast_to_channel(
+                    &state,
+                    &channel_id,
+                    &ServerMessage::PeerState {
+                        channel_id: channel_id.clone(),
+                        user_id: user_id.clone(),
+                        is_muted,
+                        is_deafened,
+                    },
+                    Some(&user_id),
                 )
                 .await;
             }
