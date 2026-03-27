@@ -1,7 +1,31 @@
 @import "tailwindcss";
 
-/* Tes styles personnalisés en dessous si besoin */
 body {
     margin: 0;
-    background-color: #1e1f22; /* Le noir Discord au cas où le chargement tarde */
+    background-color: #1e1f22;
+    font-family: Inter, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+#root {
+    height: 100vh;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #1f2124 #2b2d31;
+}
+
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+    background: #2b2d31;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: #1f2124;
+    border-radius: 999px;
+    border: 2px solid #2b2d31;
 }

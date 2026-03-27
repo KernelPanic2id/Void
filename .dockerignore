@@ -1,0 +1,22 @@
+# Build artifacts
+target/
+# Node
+node_modules/
+apps/desktop/dist/
+apps/desktop/src-tauri/gen/
+# IDE
+.idea/
+.vscode/
+# OS
+.DS_Store
+Thumbs.db
+# Tauri
+apps/desktop/src-tauri/target/
+# Misc
+*.pdb
+*.exe
+*.dll
+*.lib
+*.rlib
+*.d
+

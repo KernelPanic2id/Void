@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: discord-signaling
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 3001
+

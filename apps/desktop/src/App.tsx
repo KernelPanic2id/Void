@@ -1,129 +1,443 @@
-import { useEffect, useState, useRef } from 'react';
-import init, { check_quality, analyze_frame } from './pkg/core_wasm'; // On importe la nouvelle fonction
-import './App.css';
+import { useState } from 'react';
+import { useAuth } from './hooks/useAuth';
+import { StreamProvider } from './context/StreamContext';
+import { VoiceProvider, useVoiceStore } from './context/VoiceContext';
+import { LoginView } from "./components/auth/LoginView";
+import { MainLayout } from './components/layout/MainLayout';
+import { StreamCard } from './components/stream/StreamCard';
+import { VoiceAudioRenderer } from './components/stream/VoiceAudioRenderer';
+import { useStreamStore } from './context/StreamContext';
+import { Hash, Headphones, LogOut, Mic, MicOff, Monitor, PhoneOff, Settings, Volume2, VolumeX } from 'lucide-react';
 
-function App() {
-    const [msg, setMsg] = useState("Chargement de Rust...");
-    const [analysis, setAnalysis] = useState("En attente de flux...");
-    const [isStreaming, setIsStreaming] = useState(false);
-    const [isTooBright, setIsTooBright] = useState(false); // Pour le test "Rouge"
+const Dashboard = () => {
+    const { username, logout } = useAuth();
+    const { stream, metrics, isStreaming, startCapture, stopCapture } = useStreamStore();
+    const {
+        channelId,
+        participants,
+        isConnected,
+        isMuted,
+        error,
+        joinChannel,
+        leaveChannel,
+        toggleMute,
+        remoteStreams,
+    } = useVoiceStore();
+    const [isDeafened, setIsDeafened] = useState(false);
 
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const safeUsername = username || 'Anonyme';
+    const stageCards = [
+        { id: 'me', username: safeUsername, live: true },
+        ...participants
+            .filter((member) => member.username !== safeUsername)
+            .slice(0, 3)
+            .map((member) => ({ id: member.userId, username: member.username, live: false })),
+    ];
 
-    useEffect(() => {
-        init().then(() => {
-            setMsg(check_quality(8500));
-        });
-    }, []);
+    while (stageCards.length < 4) {
+        stageCards.push({ id: `empty-${stageCards.length}`, username: 'Slot libre', live: false });
+    }
 
-    // BOUCLE D'ANALYSE RUST (60 FPS)
-    useEffect(() => {
-        let animationId: number;
-
-        const loop = () => {
-            if (isStreaming && videoRef.current && canvasRef.current) {
-                const video = videoRef.current;
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext('2d', { willReadFrequently: true });
-
-                if (ctx && video.readyState >= 2) {
-                    // On réduit la résolution pour que Rust traite ça instantanément
-                    canvas.width = 160;
-                    canvas.height = 90;
-
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-                    // APPEL À RUST
-                    const rustResult = analyze_frame(
-                        new Uint8Array(imageData.data.buffer),
-                        canvas.width,
-                        canvas.height
-                    );
-
-                    setAnalysis(rustResult);
-
-                    // LOGIQUE "ROUGE" : Si la luminosité (extraite du string Rust) est > 200
-                    const lum = parseInt(rustResult.split(': ').pop() || "0");
-                    setIsTooBright(lum > 200);
-                }
-            }
-            animationId = requestAnimationFrame(loop);
-        };
-
-        if (isStreaming) {
-            animationId = requestAnimationFrame(loop);
-        }
-        return () => cancelAnimationFrame(animationId);
-    }, [isStreaming]);
-
-    const startStream = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getDisplayMedia({
-                video: { width: 1920, height: 1080, frameRate: 60 },
-                audio: false
-            });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-                setIsStreaming(true);
-            }
-        } catch (err) { console.error(err); }
+    const handleLogout = () => {
+        leaveChannel();
+        logout();
     };
 
-    const killStream = () => {
-        if (videoRef.current?.srcObject) {
-            (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
-            videoRef.current.srcObject = null;
-            setIsStreaming(false);
-            setIsTooBright(false);
-            setAnalysis("Stream Off")
-        }
+    const toggleDeafen = () => {
+        setIsDeafened((prev) => !prev);
     };
 
     return (
-        <div className={`h-screen transition-colors duration-300 flex flex-col items-center p-8 ${isTooBright ? 'bg-red-900' : 'bg-[#1e1f22]'}`}>
-            <h1 className="text-3xl font-bold mb-6 text-[#5865f2]">Discord WASM Bridge</h1>
+        <MainLayout
+            sidebar={
+                <SidebarContent
+                    channelId={channelId}
+                    isConnected={isConnected}
+                    isMuted={isMuted}
+                    isDeafened={isDeafened}
+                    error={error}
+                    onJoin={(targetChannelId) => joinChannel(targetChannelId, safeUsername)}
+                    onLeave={leaveChannel}
+                    onToggleMute={toggleMute}
+                    onToggleDeafen={toggleDeafen}
+                    onLogout={handleLogout}
+                />
+            }
+            sidebarFooter={
+                <UserBar
+                    username={safeUsername}
+                    isConnected={isConnected}
+                    isMuted={isMuted}
+                    onToggleMute={toggleMute}
+                    isDeafened={isDeafened}
+                    onToggleDeafen={toggleDeafen}
+                    channelId={channelId}
+                />
+            }
+            rightPanel={
+                <MembersPanel
+                    participants={participants}
+                    isConnected={isConnected}
+                    channelId={channelId}
+                    isMuted={isMuted}
+                />
+            }
+            footer={
+                <BottomActions
+                    metricsLum={metrics.lum}
+                    metricsStatus={metrics.status}
+                    isStreaming={isStreaming}
+                    onToggleStream={isStreaming ? stopCapture : startCapture}
+                    isMuted={isMuted}
+                    onToggleMute={toggleMute}
+                    isDeafened={isDeafened}
+                    onToggleDeafen={toggleDeafen}
+                    channelId={channelId}
+                />
+            }
+        >
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+                {stageCards.map((card) => {
+                    if (card.id === 'me') {
+                        return (
+                            <div key={card.id} className="relative">
+                                <StreamCard
+                                    stream={stream}
+                                    username={safeUsername}
+                                    isBright={metrics.lum > 220}
+                                />
+                                {isDeafened && (
+                                    <div
+                                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-red-500 border-2 border-[#232428] inline-flex items-center justify-center shadow-md"
+                                        aria-label="Son entrant coupe"
+                                        title="Son entrant coupe"
+                                    >
+                                        <Headphones size={13} className="text-white" />
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    }
 
-            <div className="w-full max-w-4xl flex flex-col gap-6">
-                <div className={`relative aspect-video bg-black rounded-2xl overflow-hidden border-2 shadow-2xl transition-colors ${isTooBright ? 'border-red-500' : 'border-[#2b2d31]'}`}>
-                    {!isStreaming && <div className="absolute inset-0 flex items-center justify-center text-gray-500">Prêt pour le stream</div>}
-                    <video ref={videoRef} autoPlay playsInline className="w-full h-full object-contain" />
-
-                    {/* Overlay Alerte Rust */}
-                    {isTooBright && (
-                        <div className="absolute top-4 right-4 bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold animate-pulse">
-                            ALERTE LUMINOSITÉ (RUST)
+                    return (
+                        <div key={card.id} className="relative aspect-video rounded-lg overflow-hidden bg-[#1e1f22] border border-black/30">
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <div className="w-20 h-20 rounded-full bg-[#3f4147] text-white flex items-center justify-center text-2xl font-bold">
+                                    {card.username.slice(0, 1).toUpperCase()}
+                                </div>
+                            </div>
+                            <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded flex items-center gap-2">
+                                <div className={`w-2 h-2 rounded-full ${card.username === 'Slot libre' ? 'bg-gray-500' : 'bg-green-500'}`} />
+                                <span className="text-xs font-bold text-white">{card.username}</span>
+                            </div>
                         </div>
-                    )}
-                </div>
+                    );
+                })}
 
-                <div className="bg-[#2b2d31] p-4 rounded-xl border border-white/5 flex items-center justify-between">
-                    <div className="flex gap-8">
-                        <div>
-                            <p className="text-xs font-bold uppercase text-gray-400">Engine</p>
-                            <p className="text-sm font-mono text-[#5865f2]">{msg}</p>
-                        </div>
-                        <div className="border-l border-white/10 pl-8">
-                            <p className="text-xs font-bold uppercase text-gray-400">Analyse Live (WASM)</p>
-                            <p className={`text-sm font-mono ${isTooBright ? 'text-red-400' : 'text-green-400'}`}>
-                                {isStreaming ? analysis : "---"}
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="flex gap-4">
-                        <button onClick={isStreaming ? killStream : startStream} className={`px-6 py-3 rounded-md font-bold transition-all ${isStreaming ? 'bg-red-500 hover:bg-red-600' : 'bg-[#5865f2] hover:bg-[#4752c4]'}`}>
-                            {isStreaming ? "Arrêter" : "Démarrer le stream"}
-                        </button>
-                    </div>
+                <div className="xl:col-span-2 rounded-lg bg-[#232428] border border-black/20 p-4">
+                    <h3 className="text-sm font-bold text-gray-300 uppercase tracking-wide mb-2">Activite vocale</h3>
+                    <p className="text-gray-400 text-sm mb-1">
+                        {isConnected ? `Connecte au salon ${channelId}` : 'Pas encore connecte a un salon vocal'}
+                    </p>
+                    <p className="text-xs text-gray-500">WebRTC audio en pair-a-pair (mesh).</p>
                 </div>
             </div>
 
-            {/* Canvas caché pour le traitement */}
-            <canvas ref={canvasRef} className="hidden" />
-        </div>
+            {Array.from(remoteStreams.entries()).map(([peerId, audioStream]) => (
+                <VoiceAudioRenderer key={peerId} stream={audioStream} muted={isDeafened} />
+            ))}
+        </MainLayout>
     );
+};
+
+interface SidebarContentProps {
+    channelId: string | null;
+    isConnected: boolean;
+    isMuted: boolean;
+    isDeafened: boolean;
+    error: string | null;
+    onJoin: (channelId: string) => void;
+    onLeave: () => void;
+    onToggleMute: () => void;
+    onToggleDeafen: () => void;
+    onLogout: () => void;
 }
 
-export default App;
+const SidebarContent = ({
+    channelId,
+    isConnected,
+    isMuted,
+    isDeafened,
+    error,
+    onJoin,
+    onLeave,
+    onToggleMute,
+    onToggleDeafen,
+    onLogout,
+}: SidebarContentProps) => (
+    <div className="flex flex-col h-full bg-[#2b2d31]">
+        <div className="p-4 font-bold text-gray-400 uppercase text-[12px] tracking-wider">
+            Salons Vocaux
+        </div>
+
+        <div className="px-2 space-y-2">
+            <button
+                onClick={() => onJoin('general')}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-white cursor-pointer transition-colors ${
+                    channelId === 'general' ? 'bg-[#5865f2]' : 'bg-[#35373c] hover:bg-[#3f4147]'
+                }`}
+            >
+                <Hash size={16} className="text-gray-300" />
+                General
+            </button>
+            <button
+                onClick={() => onJoin('sos')}
+                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-white cursor-pointer transition-colors ${
+                    channelId === 'sos' ? 'bg-[#5865f2]' : 'bg-[#35373c] hover:bg-[#3f4147]'
+                }`}
+            >
+                <Hash size={16} className="text-gray-300" />
+                SOS
+            </button>
+        </div>
+
+        <div className="px-4 py-3 text-xs text-gray-300 space-y-1 border-b border-black/10 mt-3">
+            <div>Etat: {isConnected ? 'Connecte' : 'Hors ligne'}</div>
+            <div>Canal: {channelId ?? 'Aucun'}</div>
+            <div>Micro: {isMuted ? 'Mute' : 'Actif'}</div>
+            <div>Son entrant: {isDeafened ? 'Coupe' : 'Actif'}</div>
+            {error && <div className="text-red-400">Erreur: {error}</div>}
+        </div>
+
+        <div className="px-2 mt-4">
+            <div className="text-[10px] uppercase tracking-wider font-bold text-gray-500 px-2 mb-2">Canaux texte</div>
+            <button className="w-full flex items-center gap-2 text-left text-sm text-gray-300 px-2 py-1 rounded hover:bg-[#3f4147] transition-colors">
+                <Hash size={14} className="text-gray-400" />
+                annonces
+            </button>
+            <button className="w-full flex items-center gap-2 text-left text-sm text-gray-300 px-2 py-1 rounded hover:bg-[#3f4147] transition-colors">
+                <Hash size={14} className="text-gray-400" />
+                logs
+            </button>
+        </div>
+
+        <div className="flex-1" />
+
+        <div className="p-4 border-t border-black/10">
+            <div className="flex gap-2 mb-3">
+                <button
+                    onClick={onToggleMute}
+                    disabled={!channelId}
+                    title={isMuted ? 'Unmute' : 'Mute'}
+                    aria-label={isMuted ? 'Unmute' : 'Mute'}
+                    aria-pressed={isMuted}
+                    className="w-9 h-9 rounded-full bg-[#35373c] hover:bg-[#3f4147] disabled:opacity-50 cursor-pointer inline-flex items-center justify-center"
+                >
+                    {isMuted ? <MicOff size={16} className="text-red-300" /> : <Mic size={16} className="text-gray-100" />}
+                </button>
+                <button
+                    onClick={onToggleDeafen}
+                    disabled={!channelId}
+                    title={isDeafened ? 'Activer le son entrant' : 'Couper le son entrant'}
+                    aria-label={isDeafened ? 'Activer le son entrant' : 'Couper le son entrant'}
+                    aria-pressed={isDeafened}
+                    className="w-9 h-9 rounded-full bg-[#35373c] hover:bg-[#3f4147] disabled:opacity-50 cursor-pointer inline-flex items-center justify-center"
+                >
+                    <Headphones size={16} className={isDeafened ? 'text-red-300' : 'text-gray-100'} />
+                </button>
+                <button
+                    onClick={onLeave}
+                    disabled={!channelId}
+                    className="flex-1 text-xs px-2 py-2 rounded bg-red-500/90 hover:bg-red-500 disabled:opacity-50 cursor-pointer inline-flex items-center justify-center gap-1"
+                >
+                    <PhoneOff size={14} />
+                    Quitter
+                </button>
+            </div>
+
+            <button
+                onClick={onLogout}
+                className="text-xs text-red-400 hover:text-red-300 hover:underline cursor-pointer inline-flex items-center gap-1"
+            >
+                <LogOut size={14} />
+                Se déconnecter
+            </button>
+        </div>
+    </div>
+);
+
+const MembersPanel = ({
+    participants,
+    isConnected,
+    channelId,
+    isMuted,
+}: {
+    participants: { userId: string; username: string }[];
+    isConnected: boolean;
+    channelId: string | null;
+    isMuted: boolean;
+}) => (
+    <div className="h-full flex flex-col">
+        <div className="h-12 px-4 flex items-center border-b border-black/20 text-sm font-semibold text-gray-200">
+            Membres vocaux
+        </div>
+        <div className="px-4 py-3 text-xs text-gray-400 border-b border-black/20">
+            {isConnected ? `Connecte sur ${channelId}` : 'Aucune connexion vocale'}
+        </div>
+        <div className="flex-1 p-3 space-y-2 overflow-y-auto">
+            {participants.length === 0 && (
+                <div className="text-xs text-gray-500">Personne dans le salon pour le moment.</div>
+            )}
+            {participants.map((member) => (
+                <div key={member.userId} className="flex items-center gap-2 bg-[#35373c] rounded-md px-3 py-2">
+                    <div className="w-7 h-7 rounded-full bg-[#5865f2] text-white text-xs font-bold flex items-center justify-center">
+                        {member.username.slice(0, 1).toUpperCase()}
+                    </div>
+                    <span className="text-sm text-gray-100 truncate flex-1">{member.username}</span>
+                    <span className={`inline-flex items-center gap-1 text-[10px] uppercase font-bold ${isMuted ? 'text-red-300' : 'text-green-300'}`}>
+                        {isMuted ? <VolumeX size={12} /> : <Volume2 size={12} />}
+                        {isMuted ? 'Mute' : 'Live'}
+                    </span>
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
+const UserBar = ({
+    username,
+    isConnected,
+    isMuted,
+    onToggleMute,
+    isDeafened,
+    onToggleDeafen,
+    channelId,
+}: {
+    username: string;
+    isConnected: boolean;
+    isMuted: boolean;
+    onToggleMute: () => void;
+    isDeafened: boolean;
+    onToggleDeafen: () => void;
+    channelId: string | null;
+}) => (
+    <div className="w-full flex items-center gap-2">
+        <div className="relative w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-xs font-bold text-white">
+            {username.slice(0, 1).toUpperCase()}
+            {isDeafened && (
+                <span className="absolute -right-1 -bottom-1 w-4 h-4 rounded-full bg-red-500 border-2 border-[#232428] inline-flex items-center justify-center">
+                    <Headphones size={9} className="text-white" />
+                </span>
+            )}
+        </div>
+        {isDeafened && <span className="sr-only">Son entrant coupe</span>}
+        <div className="flex-1 min-w-0">
+            <div className="text-sm text-white truncate font-semibold">{username}</div>
+            <div className="text-[10px] text-gray-400 uppercase tracking-wide">
+                {isConnected ? (isMuted ? 'En vocal - mute' : 'En vocal') : 'Hors vocal'}
+            </div>
+        </div>
+        <div className="flex items-center gap-1">
+            <button
+                onClick={onToggleMute}
+                disabled={!channelId}
+                title={isMuted ? 'Unmute' : 'Mute'}
+                aria-label={isMuted ? 'Unmute' : 'Mute'}
+                aria-pressed={isMuted}
+                className="w-7 h-7 rounded bg-[#3f4147] hover:bg-[#4a4d55] disabled:opacity-50 inline-flex items-center justify-center cursor-pointer"
+            >
+                {isMuted ? <MicOff size={14} className="text-red-300" /> : <Mic size={14} className="text-gray-200" />}
+            </button>
+            <button
+                onClick={onToggleDeafen}
+                disabled={!channelId}
+                title={isDeafened ? 'Activer le son entrant' : 'Couper le son entrant'}
+                aria-label={isDeafened ? 'Activer le son entrant' : 'Couper le son entrant'}
+                aria-pressed={isDeafened}
+                className="w-7 h-7 rounded bg-[#3f4147] hover:bg-[#4a4d55] disabled:opacity-50 inline-flex items-center justify-center cursor-pointer"
+            >
+                <Headphones size={14} className={isDeafened ? 'text-red-300' : 'text-gray-200'} />
+            </button>
+            <button className="w-7 h-7 rounded bg-[#3f4147] hover:bg-[#4a4d55] inline-flex items-center justify-center cursor-pointer">
+                <Settings size={14} className="text-gray-200" />
+            </button>
+        </div>
+    </div>
+);
+
+const BottomActions = ({
+    metricsLum,
+    metricsStatus,
+    isStreaming,
+    onToggleStream,
+    isMuted,
+    onToggleMute,
+    isDeafened,
+    onToggleDeafen,
+    channelId,
+}: {
+    metricsLum: number;
+    metricsStatus: string;
+    isStreaming: boolean;
+    onToggleStream: () => void;
+    isMuted: boolean;
+    onToggleMute: () => void;
+    isDeafened: boolean;
+    onToggleDeafen: () => void;
+    channelId: string | null;
+}) => (
+    <div className="w-full flex items-center justify-between gap-4">
+        <div className="flex flex-col">
+            <span className="text-[10px] uppercase font-bold text-gray-500">Flux Rust WASM</span>
+            <span className={metricsLum > 220 ? 'text-red-400 font-mono' : 'text-green-400 font-mono'}>
+                {metricsStatus} (Lum: {metricsLum})
+            </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+            <button
+                onClick={onToggleMute}
+                disabled={!channelId}
+                title={isMuted ? 'Unmute' : 'Mute'}
+                aria-label={isMuted ? 'Unmute' : 'Mute'}
+                aria-pressed={isMuted}
+                className="w-10 h-10 rounded-full font-semibold bg-[#3f4147] hover:bg-[#4a4d55] disabled:opacity-50 text-white cursor-pointer inline-flex items-center justify-center"
+            >
+                {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
+            </button>
+
+            <button
+                onClick={onToggleDeafen}
+                disabled={!channelId}
+                title={isDeafened ? 'Activer le son entrant' : 'Couper le son entrant'}
+                aria-label={isDeafened ? 'Activer le son entrant' : 'Couper le son entrant'}
+                aria-pressed={isDeafened}
+                className="w-10 h-10 rounded-full font-semibold bg-[#3f4147] hover:bg-[#4a4d55] disabled:opacity-50 text-white cursor-pointer inline-flex items-center justify-center"
+            >
+                <Headphones size={16} className={isDeafened ? 'text-red-300' : 'text-gray-100'} />
+            </button>
+
+            <button
+                onClick={onToggleStream}
+                className={`px-6 py-2 rounded-full font-bold transition-all inline-flex items-center gap-2 ${
+                    isStreaming ? 'bg-red-500 hover:bg-red-600' : 'bg-[#248046] hover:bg-[#1a6334]'
+                } text-white cursor-pointer`}
+            >
+                <Monitor size={16} />
+                {isStreaming ? 'Arreter le partage' : 'Partager l\'ecran'}
+            </button>
+        </div>
+    </div>
+);
+
+export default function App() {
+    const { isAuthenticated, login } = useAuth();
+
+    return (
+        <VoiceProvider>
+            <StreamProvider>
+                {isAuthenticated ? <Dashboard /> : <LoginView onLogin={login} />}
+            </StreamProvider>
+        </VoiceProvider>
+    );
+}
