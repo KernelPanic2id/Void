@@ -5,15 +5,10 @@ on:
     tags:
       - 'v*'
 
-permissions:
-  contents: write
-  repository-projects: write
-  pull-requests: write
-
 jobs:
   publish-tauri:
     permissions:
-      contents: write
+      contents: write # Obligatoire pour créer la release
     strategy:
       fail-fast: false
       matrix:
@@ -42,7 +37,6 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       - name: Build WASM package
-
         run: |
           cd packages/core-wasm
           wasm-pack build --target web --out-dir ../../apps/desktop/src/pkg
@@ -53,7 +47,6 @@ jobs:
       - name: Build and Publish
         uses: tauri-apps/tauri-action@v0
         env:
-
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
           TAURI_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
@@ -64,5 +57,7 @@ jobs:
           releaseDraft: false
           prerelease: false
           projectPath: ./apps/desktop
-
+          # Force la génération du JSON de l'updater
           includeUpdaterJson: true
+          # On ajoute l'argument de build pour être sûr que Tauri signe le tout
+          args: --verbose
