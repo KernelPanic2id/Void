@@ -24,7 +24,7 @@
   "plugins": {
     "updater": {
       "active": true,
-      "pubkey": "RWRSZ0ZPKYcR18IPF5e3hsoPeYuQ44r4MqkEtY80zzi3G41dZV/QYyYH",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCNzQ5MDk3QjkwRTg3REYKUldUZmh3NjVsNUIwUzRkSzRHYmNRWHhJakRuVm9JU2M4d29XVFkyYnlLUGtJMkord1MwV3RaUVIK",
       "endpoints": [
         "https://github.com/RaphaelTaibi/discordWASM/releases/latest/download/latest.json"
       ]
