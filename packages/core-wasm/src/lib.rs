@@ -185,3 +185,40 @@ pub fn check_quality(bitrate: u32) -> String {
     }
 }
 
+// =========================
+// === SMART GATE AUDIO  ===
+// =========================
+
+#[wasm_bindgen]
+pub struct SmartGate {
+    threshold: f32,
+    attack: f32,
+    release: f32,
+    current_gain: f32,
+}
+
+#[wasm_bindgen]
+impl SmartGate {
+    #[wasm_bindgen(constructor)]
+    pub fn new(threshold: f32, attack: f32, release: f32) -> SmartGate {
+        SmartGate {
+            threshold,
+            attack,
+            release,
+            current_gain: 0.0,
+        }
+    }
+
+    pub fn process(&mut self, audio: &mut [f32]) {
+        let rms = rms_volume(audio);
+        let target_gain = if rms > self.threshold { 1.0 } else { 0.0 };
+        for sample in audio.iter_mut() {
+            if target_gain > self.current_gain {
+                self.current_gain = (self.current_gain + self.attack).min(1.0);
+            } else {
+                self.current_gain = (self.current_gain - self.release).max(0.0);
+            }
+            *sample *= self.current_gain;
+        }
+    }
+}

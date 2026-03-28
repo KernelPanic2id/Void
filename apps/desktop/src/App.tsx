@@ -14,6 +14,40 @@ import { UserBar } from './components/sidebar/UserBar';
 import { ToastContainer } from './components/ui/ToastContainer';
 import { useVoiceActivity } from './hooks/useVoiceActivity';
 import { Headphones } from 'lucide-react';
+import { check, Update } from '@tauri-apps/plugin-updater';
+import { useState } from 'react';
+
+function useTauriUpdater() {
+    const [updateAvailable, setUpdateAvailable] = useState(false);
+    const [updateStatus, setUpdateStatus] = useState<string | null>(null);
+    const [updateObj, setUpdateObj] = useState<Update | null>(null);
+
+    useEffect(() => {
+        (async () => {
+            try {
+                const update = await check();
+                if (update) {
+                    setUpdateAvailable(true);
+                    setUpdateObj(update);
+                }
+            } catch (e) {
+                setUpdateStatus('Erreur lors de la vérification des mises à jour');
+            }
+        })();
+    }, []);
+
+    const triggerUpdate = async () => {
+        if (!updateObj) return;
+        setUpdateStatus('Installation de la mise à jour...');
+        try {
+            await updateObj.downloadAndInstall();
+        } catch (e) {
+            setUpdateStatus('Erreur lors de l\'installation de la mise à jour');
+        }
+    };
+
+    return { updateAvailable, updateStatus, triggerUpdate };
+}
 
 const Dashboard = () => {
     const { username, logout } = useAuth();
@@ -38,6 +72,7 @@ const Dashboard = () => {
     } = useVoiceStore();
 
     const speakingUsers = useVoiceActivity(remoteStreams, localUserId, localStream, isMuted);
+    const { updateAvailable, updateStatus, triggerUpdate } = useTauriUpdater();
 
     // Bridge screen share to WebRTC peer connections
     useEffect(() => {
@@ -193,9 +228,25 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {Array.from(remoteStreams.entries()).map(([peerId, audioStream]) => (
-                <VoiceAudioRenderer key={peerId} stream={audioStream} muted={isDeafened} />
+            {Array.from(remoteStreams.entries())
+                .filter(([peerId]) => peerId !== localUserId)
+                .map(([peerId, audioStream]) => (
+                    <VoiceAudioRenderer key={peerId} stream={audioStream} muted={isDeafened} peerId={peerId} />
             ))}
+
+            {updateAvailable && (
+                <div className="fixed bottom-4 right-4 bg-blue-700 text-white px-4 py-2 rounded shadow-lg z-50">
+                    <span>Une mise à jour est disponible ! </span>
+                    <button className="ml-2 bg-white text-blue-700 px-2 py-1 rounded" onClick={triggerUpdate}>
+                        Mettre à jour
+                    </button>
+                </div>
+            )}
+            {updateStatus && (
+                <div className="fixed bottom-16 right-4 bg-gray-800 text-white px-4 py-2 rounded shadow-lg z-50">
+                    {updateStatus}
+                </div>
+            )}
         </MainLayout>
     );
 };

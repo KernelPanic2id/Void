@@ -1,4 +1,4 @@
-import init, { analyze_frame } from "../pkg";
+import init, { analyze_frame } from "../pkg/core_wasm";
 
 type AnalyzerWorkerIncomingMessage = {
     type: 'ANALYZE';

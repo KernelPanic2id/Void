@@ -17,5 +17,6 @@ export default interface VoiceState {
     remoteVideoStreams: Map<string, MediaStream>;
     addScreenTrack: (stream: MediaStream) => void;
     removeScreenTrack: () => void;
+    userVolumes: Map<string, number>;
+    setUserVolume: (userId: string, volume: number) => void;
 }
-

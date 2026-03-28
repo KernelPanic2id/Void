@@ -1,4 +1,4 @@
-import { createContext, ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ClientSignalMessage } from '../types/clientSignal.type';
 import { ServerSignalMessage } from '../types/serverSignal.type';
 import VoicePeer from '../models/voicePeer.model';
@@ -19,12 +19,8 @@ const ICE_SERVERS: RTCIceServer[] = [
         : []),
 ];
 
-const VoiceContext = createContext<VoiceState | undefined>(undefined);
 
-const buildUserId = () => {
-    const randomPart = Math.random().toString(36).slice(2, 10);
-    return `user-${Date.now()}-${randomPart}`;
-};
+const VoiceContext = createContext<VoiceState | undefined>(undefined);
 
 export const VoiceProvider = ({ children }: { children: ReactNode }) => {
     const { addToast } = useToast();
@@ -37,11 +33,15 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
     const [remoteStreams, setRemoteStreams] = useState<Map<string, MediaStream>>(new Map());
     const [remoteVideoStreams, setRemoteVideoStreams] = useState<Map<string, MediaStream>>(new Map());
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+    const [userVolumes, setUserVolumes] = useState<VolumeMap>(new Map());
+    const [smartGateEnabled] = useState(true);
 
     const socketRef = useRef<WebSocket | null>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
     const screenStreamRef = useRef<MediaStream | null>(null);
     const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+    // Ajout d'un flag de négociation par peer
+    const negotiatingRef = useRef<Map<string, boolean>>(new Map());
     const userIdRef = useRef<string>(buildUserId());
     const usernameRef = useRef<string>('Anonymous');
     const channelIdRef = useRef<string | null>(null);
@@ -62,6 +62,7 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
             pc.close();
             peerConnectionsRef.current.delete(peerId);
         }
+        negotiatingRef.current.delete(peerId);
 
         setRemoteStreams((prev) => {
             const next = new Map(prev);
@@ -83,21 +84,52 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         if (!pc) {
             pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
+            // Ajout du flag de négociation
+            negotiatingRef.current.set(peer.userId, false);
+
             // Add audio tracks
             const localStream = localStreamRef.current;
             if (localStream) {
-                for (const track of localStream.getTracks()) {
+                const audioTracks = localStream.getAudioTracks();
+                console.log('[VoiceContext] localStream audioTracks (avant ajout)', audioTracks.map(t => ({
+                    id: t.id,
+                    enabled: t.enabled,
+                    muted: t.muted,
+                    readyState: t.readyState
+                })));
+                for (const track of audioTracks) {
+                    // Correction : forcer la track à être activée si non muté
+                    if (!isMuted) {
+                        if (!track.enabled) {
+                            console.warn('[VoiceContext] Track locale désactivée, on la réactive');
+                            track.enabled = true;
+                        }
+                    }
+                    console.log('[VoiceContext] Ajout de la track audio à RTCPeerConnection', {
+                        id: track.id,
+                        enabled: track.enabled,
+                        muted: track.muted,
+                        readyState: track.readyState
+                    });
                     pc.addTrack(track, localStream);
                 }
+            } else {
+                console.warn('[VoiceContext] Pas de localStream pour', peer.userId);
             }
 
             // Ajout du handler negotiationneeded pour renégociation automatique
             pc.onnegotiationneeded = async () => {
                 if (!channelIdRef.current) return;
                 if (!pc) return;
+                if (negotiatingRef.current.get(peer.userId)) {
+                    console.warn('[VoiceContext] Négociation déjà en cours pour', peer.userId);
+                    return;
+                }
+                negotiatingRef.current.set(peer.userId, true);
                 try {
                     const offer = await pc.createOffer();
                     await pc.setLocalDescription(offer);
+                    console.log('[VoiceContext] Envoi offer SDP à', peer.userId, offer);
                     sendSignal({
                         type: 'offer',
                         channelId: channelIdRef.current,
@@ -107,6 +139,8 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                     });
                 } catch (e) {
                     console.warn('[VoiceContext] Erreur negotiationneeded', e);
+                } finally {
+                    negotiatingRef.current.set(peer.userId, false);
                 }
             };
 
@@ -114,6 +148,7 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                 if (!event.candidate || !channelIdRef.current) {
                     return;
                 }
+                console.log('[VoiceContext] Envoi ICE candidate à', peer.userId, event.candidate);
                 sendSignal({
                     type: 'ice',
                     channelId: channelIdRef.current,
@@ -128,11 +163,14 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                 if (!stream) {
                     return;
                 }
+                console.log('[VoiceContext] ontrack reçu', event.track.kind, 'de', peer.userId, stream);
+                // Capture explicite du peerId pour les closures
+                const currentPeerId = peer.userId;
 
                 if (event.track.kind === 'audio') {
                     setRemoteStreams((prev) => {
                         const next = new Map(prev);
-                        next.set(peer.userId, stream);
+                        next.set(currentPeerId, stream);
                         return next;
                     });
 
@@ -140,28 +178,28 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                     event.track.onended = () => {
                         setRemoteStreams((prev) => {
                             const next = new Map(prev);
-                            next.delete(peer.userId);
+                            next.delete(currentPeerId);
                             return next;
                         });
                     };
                     event.track.onmute = () => {
                         setRemoteStreams((prev) => {
                             const next = new Map(prev);
-                            next.delete(peer.userId);
+                            next.delete(currentPeerId);
                             return next;
                         });
                     };
                     event.track.onunmute = () => {
                         setRemoteStreams((prev) => {
                             const next = new Map(prev);
-                            next.set(peer.userId, stream);
+                            next.set(currentPeerId, stream);
                             return next;
                         });
                     };
                 } else if (event.track.kind === 'video') {
                     setRemoteVideoStreams((prev) => {
                         const next = new Map(prev);
-                        next.set(peer.userId, stream);
+                        next.set(currentPeerId, stream);
                         return next;
                     });
 
@@ -169,21 +207,21 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                     event.track.onended = () => {
                         setRemoteVideoStreams((prev) => {
                             const next = new Map(prev);
-                            next.delete(peer.userId);
+                            next.delete(currentPeerId);
                             return next;
                         });
                     };
                     event.track.onmute = () => {
                         setRemoteVideoStreams((prev) => {
                             const next = new Map(prev);
-                            next.delete(peer.userId);
+                            next.delete(currentPeerId);
                             return next;
                         });
                     };
                     event.track.onunmute = () => {
                         setRemoteVideoStreams((prev) => {
                             const next = new Map(prev);
-                            next.set(peer.userId, stream);
+                            next.set(currentPeerId, stream);
                             return next;
                         });
                     };
@@ -199,7 +237,6 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                 return [...prev, peer];
             });
         }
-
         // Ajout ou MAJ de la track vidéo du screen share si active
         const screenStream = screenStreamRef.current;
         if (screenStream) {
@@ -208,11 +245,9 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                 const hasVideo = pc.getSenders().some((s) => s.track?.kind === 'video');
                 if (!hasVideo) {
                     pc.addTrack(videoTrack, screenStream);
-                    // La renégociation sera auto-déclenchée par onnegotiationneeded
                 }
             }
         }
-
         return pc;
     }, [sendSignal]);
 
@@ -302,16 +337,14 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         if (!nextChannelId) {
             return;
         }
-
         if (channelIdRef.current) {
             leaveChannel();
         }
-
         setError(null);
         usernameRef.current = username || 'Anonymous';
-
         try {
-            const localStream = await navigator.mediaDevices.getUserMedia({
+            // Capture micro brute
+            const rawStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
                     noiseSuppression: true,
@@ -320,6 +353,33 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                 video: false,
             });
 
+            const audioCtx = new window.AudioContext();
+            const source = audioCtx.createMediaStreamSource(rawStream);
+            const dest = audioCtx.createMediaStreamDestination();
+
+            // Charger le worklet (chemin relatif selon ton build)
+            await audioCtx.audioWorklet.addModule('/src/worker/noise-gate.worklet.js');
+            const node = new AudioWorkletNode(audioCtx, 'noise-gate-processor');
+
+            // Envoyer les paramètres et chemins du module WASM au worklet
+            node.port.postMessage({
+                type: 'INIT_WASM',
+                wasmJsPath: '/src/pkg/core_wasm.js', // adapte selon ton build
+                wasmBinPath: '/src/pkg/core_wasm_bg.wasm',
+                threshold: 0.08,
+                attack: 0.003,
+                release: 0.05,
+            });
+
+            // Toggle smart gate (bypass si désactivé)
+            if (!smartGateEnabled) {
+                source.connect(dest);
+            } else {
+                source.connect(node);
+                node.connect(dest);
+            }
+
+            const localStream = dest.stream;
             localStreamRef.current = localStream;
             setLocalStream(localStream);
 
@@ -365,16 +425,8 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                         })),
                     ]);
                     for (const peer of msg.peers) {
-                        const pc = createPeerConnection(peer);
-                        const offer = await pc.createOffer();
-                        await pc.setLocalDescription(offer);
-                        sendSignal({
-                            type: 'offer',
-                            channelId: msg.channelId,
-                            from: userIdRef.current,
-                            to: peer.userId,
-                            sdp: offer,
-                        });
+                        createPeerConnection(peer);
+                        // SUPPRESSION de l'appel manuel à createOffer ici : on laisse onnegotiationneeded gérer
                     }
                     return;
                 }
@@ -434,11 +486,11 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                 setError('Connexion signaling indisponible');
             };
         } catch (err) {
-            const message = err instanceof Error ? err.message : 'Impossible d\'accéder au micro';
+            const message = err instanceof Error ? err.message : "Impossible d'accéder au micro";
             setError(message);
             leaveChannel();
         }
-    }, [createPeerConnection, handleAnswer, handleIce, handleOffer, leaveChannel, removePeerConnection, sendSignal, addToast, participants]);
+    }, [createPeerConnection, handleAnswer, handleIce, handleOffer, leaveChannel, removePeerConnection, sendSignal, addToast, participants, smartGateEnabled]);
 
     const toggleMute = useCallback(() => {
         const local = localStreamRef.current;
@@ -497,12 +549,13 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
 
     const removeScreenTrack = useCallback(() => {
         screenStreamRef.current = null;
-
         for (const [, pc] of peerConnectionsRef.current.entries()) {
             const senders = pc.getSenders();
             for (const sender of senders) {
                 if (sender.track?.kind === 'video') {
                     pc.removeTrack(sender);
+                    // Déclencher la négociation manuellement
+                    if (pc.onnegotiationneeded) pc.onnegotiationneeded(new Event('negotiationneeded'));
                 }
             }
         }
@@ -515,17 +568,27 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         videoTrack.onended = () => {
             removeScreenTrack();
         };
-
         for (const [, pc] of peerConnectionsRef.current.entries()) {
-            // Don't add if already has a video sender with a track
             const hasVideo = pc.getSenders().some((s) => s.track?.kind === 'video');
             if (!hasVideo) {
                 pc.addTrack(videoTrack, screenStream);
+                // Déclencher la négociation manuellement
+                if (pc.onnegotiationneeded) pc.onnegotiationneeded(new Event('negotiationneeded'));
             }
         }
     }, [removeScreenTrack]);
 
 
+    // Setter pour le volume d'un utilisateur
+    const setUserVolume = useCallback((userId: string, volume: number) => {
+        setUserVolumes((prev) => {
+            const next = new Map(prev);
+            next.set(userId, volume);
+            return next;
+        });
+    }, []);
+
+    // Correction du useMemo : on retire denoiseEnabled et setDenoiseEnabled
     const value = useMemo<VoiceState>(() => ({
         channelId,
         participants,
@@ -543,7 +606,41 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         remoteVideoStreams,
         addScreenTrack,
         removeScreenTrack,
-    }), [channelId, participants, isConnected, isMuted, isDeafened, error, localStream, joinChannel, leaveChannel, toggleMute, toggleDeafen, remoteStreams, remoteVideoStreams, addScreenTrack, removeScreenTrack]);
+        userVolumes,
+        setUserVolume,
+        smartGateEnabled,
+    }), [
+        channelId,
+        participants,
+        isConnected,
+        isMuted,
+        isDeafened,
+        error,
+        localStream,
+        joinChannel,
+        leaveChannel,
+        toggleMute,
+        toggleDeafen,
+        remoteStreams,
+        remoteVideoStreams,
+        addScreenTrack,
+        removeScreenTrack,
+        userVolumes,
+        setUserVolume,
+        smartGateEnabled,
+    ]);
+
+    // Synchronisation systématique de l'état enabled des tracks audio locales avec isMuted
+    useEffect(() => {
+        const local = localStreamRef.current;
+        if (!local) return;
+        for (const track of local.getAudioTracks()) {
+            if (track.enabled !== !isMuted) {
+                track.enabled = !isMuted;
+                console.log('[VoiceContext] Sync: track', track.id, 'enabled =', track.enabled, '(isMuted =', isMuted, ')');
+            }
+        }
+    }, [isMuted, localStream]);
 
     return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;
 };
@@ -556,3 +653,11 @@ export const useVoiceStore = () => {
     return context;
 };
 
+// Ajout du type VolumeMap manquant
+ type VolumeMap = Map<string, number>;
+
+// Ajout de la fonction utilitaire buildUserId manquante
+function buildUserId() {
+    const randomPart = Math.random().toString(36).slice(2, 10);
+    return `user-${Date.now()}-${randomPart}`;
+}
