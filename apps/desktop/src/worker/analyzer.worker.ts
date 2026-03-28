@@ -49,7 +49,7 @@ self.onmessage = (e: MessageEvent<AnalyzerWorkerIncomingMessage>) => {
                 raw,
             },
         });
-    } catch (error) {
+    } catch (error: any) {
         const message = `Rust analysis failed: ${String(error)}`;
         console.error(message);
         self.postMessage({ type: 'ERROR', error: message });
