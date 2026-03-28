@@ -21,6 +21,15 @@
       "csp": null
     }
   },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "pubkey": "RWRSZ0ZPKYcR18IPF5e3hsoPeYuQ44r4MqkEtY80zzi3G41dZV/QYyYH",
+      "endpoints": [
+        "https://github.com/TON_NOM_GITHUB/TON_REPO/releases/latest/download/latest.json"
+      ]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
