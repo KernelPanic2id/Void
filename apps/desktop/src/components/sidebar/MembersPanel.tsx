@@ -40,7 +40,6 @@ export const MembersPanel = ({
                     const memberMuted = !!member.isMuted;
                     const memberDeafened = !!member.isDeafened;
                     const isSpeaking = speakingUsers?.get(member.userId) ?? false;
-                    const volume = userVolumes.get(member.userId) ?? 1;
 
                     return (
                         <div
