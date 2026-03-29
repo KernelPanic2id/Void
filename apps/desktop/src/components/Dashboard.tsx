@@ -3,12 +3,10 @@ import { useAuth } from '../context/AuthContext';
 import { useStreamStore } from '../context/StreamContext';
 import { useVoiceStore } from '../context/VoiceContext';
 import { MainLayout } from './layout/MainLayout';
-import { BottomActions } from './layout/BottomActions';
 import { StreamCard } from './stream/StreamCard';
 import { VoiceAudioRenderer } from './stream/VoiceAudioRenderer';
 import { SidebarContent } from './sidebar/SidebarContent';
-import { MembersPanel } from './sidebar/MembersPanel';
-import { UserBar } from './sidebar/UserBar';
+import UserFooter from './sidebar/UserFooter';
 import { useVoiceActivity } from '../hooks/useVoiceActivity';
 import { Headphones } from 'lucide-react';
 import { useTauriUpdater } from '../lib/useTauriUpdater';
@@ -33,6 +31,8 @@ const Dashboard = () => {
         remoteVideoStreams,
         addScreenTrack,
         removeScreenTrack,
+        networkQuality, // Vraie valeur du WASM
+        ping,           // Vrai ping calculé
     } = useVoiceStore();
 
     const speakingUsers = useVoiceActivity(remoteStreams, localUserId, localStream, isMuted);
@@ -57,9 +57,30 @@ const Dashboard = () => {
             .map((member) => ({ id: member.userId, username: member.username, live: false })),
     ];
 
+    const salons = [
+        {
+            id: 'general',
+            name: 'General',
+            members: channelId === 'general' ? participants : [],
+        },
+        {
+            id: 'sos',
+            name: 'SOS',
+            members: channelId === 'sos' ? participants : [],
+        },
+    ];
+
     const handleLogout = () => {
         leaveChannel();
         logout();
+    };
+
+    const handleStreamToggle = () => {
+        if (isStreaming) {
+            stopCapture();
+        } else {
+            startCapture();
+        }
     };
 
     return (
@@ -77,10 +98,12 @@ const Dashboard = () => {
                     onToggleDeafen={toggleDeafen}
                     onLogout={handleLogout}
                     updateCheck={checkForUpdate}
+                    salons={salons}
+                    localUserId={localUserId}
                 />
             }
             sidebarFooter={
-                <UserBar
+                <UserFooter
                     username={safeUsername}
                     isConnected={isConnected}
                     isMuted={isMuted}
@@ -89,34 +112,13 @@ const Dashboard = () => {
                     onToggleDeafen={toggleDeafen}
                     channelId={channelId}
                     isSpeaking={speakingUsers.get(localUserId) ?? false}
-                />
-            }
-            rightPanel={
-                <MembersPanel
-                    participants={participants}
-                    isConnected={isConnected}
-                    channelId={channelId}
-                    speakingUsers={speakingUsers}
-                />
-            }
-            footer={
-                <BottomActions
-                    metricsLum={metrics.lum}
-                    metricsStatus={metrics.status}
+                    onLeave={leaveChannel}
+                    onLogout={handleLogout}
+                    onStream={handleStreamToggle}
                     isStreaming={isStreaming}
-                    onToggleStream={() => {
-                        if (isStreaming) {
-                            removeScreenTrack();
-                            stopCapture();
-                        } else {
-                            startCapture();
-                        }
-                    }}
-                    isMuted={isMuted}
-                    onToggleMute={toggleMute}
-                    isDeafened={isDeafened}
-                    onToggleDeafen={toggleDeafen}
-                    channelId={channelId}
+                    networkQuality={networkQuality as 0 | 1 | 2 | 3}
+                    ping={ping}
+                    updateCheck={checkForUpdate}
                 />
             }
         >
@@ -150,7 +152,6 @@ const Dashboard = () => {
                                 </div>
                             );
                         } else {
-                            // Placeholder centré si pas de stream
                             return (
                                 <div key={card.id} className="relative flex flex-col items-center justify-center aspect-video rounded-lg overflow-hidden bg-[#232428] border border-black/30">
                                     <div className="flex flex-col items-center justify-center w-full h-full">
@@ -234,4 +235,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

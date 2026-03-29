@@ -1,3 +1,5 @@
+import VoicePeer from './voicePeer.model';
+
 export default interface SidebarContentProps {
     channelId: string | null;
     isConnected: boolean;
@@ -10,4 +12,6 @@ export default interface SidebarContentProps {
     onToggleDeafen: () => void;
     onLogout: () => void;
     updateCheck?: () => void;
+    salons: { id: string; name: string; members: VoicePeer[] }[];
+    localUserId: string;
 }

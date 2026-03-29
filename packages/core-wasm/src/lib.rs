@@ -152,6 +152,19 @@ pub fn is_frozen_frame(data1: &[u8], data2: &[u8], tolerance: u8) -> bool {
 // === RÉSEAU & SÉCURITÉ ===
 // =========================
 
+// Calcule un score de qualité réseau (0-3) basé sur WebRTC stats
+#[wasm_bindgen]
+pub fn calculate_network_quality(latency_ms: f32, packet_loss: f32, jitter_ms: f32) -> u8 {
+    // 3: Excellent, 2: Moyen, 1: Mauvais, 0: Critique/Déconnecté
+    if latency_ms > 400.0 || packet_loss > 0.15 || jitter_ms > 100.0 {
+        return 1;
+    }
+    if latency_ms > 150.0 || packet_loss > 0.05 || jitter_ms > 30.0 {
+        return 2;
+    }
+    3
+}
+
 // Conversion ms <-> samples
 #[wasm_bindgen]
 pub fn ms_to_samples(ms: f32, sample_rate: f32) -> usize {
@@ -222,4 +235,3 @@ impl SmartGate {
         }
     }
 }
-

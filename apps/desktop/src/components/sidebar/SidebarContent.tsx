@@ -1,126 +1,82 @@
-import { Hash, Headphones, LogOut, Mic, MicOff, PhoneOff } from 'lucide-react';
+import { Hash, Headphones, MicOff } from 'lucide-react';
 import SidebarContentProps from '../../models/sidebarContentProps.model';
 
 export const SidebarContent = ({
     channelId,
-    isConnected,
-    isMuted,
-    isDeafened,
-    error,
     onJoin,
-    onLeave,
-    onToggleMute,
-    onToggleDeafen,
-    onLogout,
-    updateCheck,
+    salons,
+    localUserId,
 }: SidebarContentProps) => (
-    <div className="flex flex-col h-full bg-[#2b2d31]">
-        <div className="p-4 font-bold text-gray-400 uppercase text-[12px] tracking-wider">
-            Salons Vocaux
+    <div className="flex flex-col h-full bg-[#2b2d31] select-none">
+        {/* Section salons vocaux */}
+        <div className="pt-3 pb-1 px-4 font-bold text-[#949ba4] uppercase text-[11px] tracking-wider select-none">
+            Salons vocaux
+        </div>
+        <div className="flex-1 px-2 space-y-0.5 overflow-y-auto overflow-x-hidden custom-scrollbar">
+            {salons.length === 0 ? (
+                <div className="text-xs text-gray-500 italic px-2">Aucun salon disponible</div>
+            ) : (
+                salons.map((salon) => (
+                    <div key={salon.id} className="mb-1">
+                        <button
+                            onClick={() => onJoin(salon.id)}
+                            className={`w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-left text-[15px] font-medium transition-colors duration-100 group
+                                ${channelId === salon.id ? 'bg-[#404249] text-white' : 'text-[#949ba4] hover:bg-[#35373c] hover:text-[#dbdee1]'}
+                            `}
+                        >
+                            <Hash size={20} className="text-[#80848e]" />
+                            <span className="truncate flex-1">{salon.name}</span>
+                        </button>
+
+                        {/* Liste des membres du salon */}
+                        <div className="pl-8 mt-0.5 space-y-0.5">
+                            {salon.members.map((member) => (
+                                <div key={member.userId} className="flex items-center gap-2 py-1 group rounded-[4px] px-2 hover:bg-[#35373c] cursor-pointer">
+                                    <div className={`w-6 h-6 rounded-full bg-[#5865f2] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0
+                                        ${member.userId === localUserId ? 'ring-2 ring-[#248046]' : ''}
+                                    `}>
+                                        {member.username.slice(0, 1).toUpperCase()}
+                                    </div>
+                                    <span className="text-[14px] text-[#949ba4] group-hover:text-[#dbdee1] truncate flex-1 font-medium">
+                                        {member.username}
+                                    </span>
+                                    
+                                    {/* Icônes de statut (Muet / Casque) */}
+                                    <div className="flex items-center gap-1 flex-shrink-0">
+                                        {member.isMuted && !member.isDeafened && (
+                                            <MicOff size={14} className="text-[#f23f42]" title="Muet" />
+                                        )}
+                                        {member.isDeafened && (
+                                            <>
+                                                <MicOff size={14} className="text-[#f23f42]" title="Muet" />
+                                                <Headphones size={14} className="text-[#f23f42]" title="Sourdine" />
+                                            </>
+                                        )}
+                                        {!member.isMuted && !member.isDeafened && (
+                                            <span className="text-[#23a55a] text-[10px] font-bold px-1 bg-[#23a55a]/10 rounded-sm">LIVE</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))
+            )}
         </div>
 
-        <div className="px-2 space-y-2">
-            <button
-                onClick={() => onJoin('general')}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-white cursor-pointer transition-colors duration-150 ${
-                    channelId === 'general' ? 'bg-[#5865f2]' : 'bg-[#35373c] hover:bg-[#3f4147]'
-                }`}
-            >
-                <Hash size={16} className="text-gray-300" />
-                General
-            </button>
-            <button
-                onClick={() => onJoin('sos')}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-white cursor-pointer transition-colors duration-150 ${
-                    channelId === 'sos' ? 'bg-[#5865f2]' : 'bg-[#35373c] hover:bg-[#3f4147]'
-                }`}
-            >
-                <Hash size={16} className="text-gray-300" />
-                SOS
-            </button>
+        {/* Section salons textuels */}
+        <div className="pt-3 pb-1 px-4 font-bold text-[#949ba4] uppercase text-[11px] tracking-wider select-none">
+            Canaux texte
         </div>
-
-        <div className="px-4 py-3 text-xs text-gray-300 space-y-1 border-b border-black/10 mt-3">
-            <div className="flex items-center gap-1.5">
-                État: {isConnected ? (
-                    <>
-                        <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
-                        </span>
-                        Connecté
-                    </>
-                ) : 'Hors ligne'}
-            </div>
-            <div>Canal: {channelId ?? 'Aucun'}</div>
-            <div>Micro: {isMuted ? 'Muté' : 'Actif'}</div>
-            <div>Son entrant: {isDeafened ? 'Coupé' : 'Actif'}</div>
-            {error && <div className="text-red-400">Erreur: {error}</div>}
-        </div>
-
-        <div className="px-2 mt-4">
-            <div className="text-[10px] uppercase tracking-wider font-bold text-gray-500 px-2 mb-2">Canaux texte</div>
-            <button className="w-full flex items-center gap-2 text-left text-sm text-gray-300 px-2 py-1 rounded hover:bg-[#3f4147] transition-colors duration-150">
-                <Hash size={14} className="text-gray-400" />
+        <div className="px-2 space-y-0.5 mb-2">
+            <button className="w-full flex items-center gap-1.5 text-left text-[15px] text-[#949ba4] px-2 py-1.5 rounded-md hover:bg-[#35373c] hover:text-[#dbdee1] transition-colors duration-100 group">
+                <Hash size={20} className="text-[#80848e]" />
                 annonces
             </button>
-            <button className="w-full flex items-center gap-2 text-left text-sm text-gray-300 px-2 py-1 rounded hover:bg-[#3f4147] transition-colors duration-150">
-                <Hash size={14} className="text-gray-400" />
+            <button className="w-full flex items-center gap-1.5 text-left text-[15px] text-[#949ba4] px-2 py-1.5 rounded-md hover:bg-[#35373c] hover:text-[#dbdee1] transition-colors duration-100 group">
+                <Hash size={20} className="text-[#80848e]" />
                 logs
-            </button>
-        </div>
-
-        <div className="flex-1" />
-
-        <div className="p-4 border-t border-black/10">
-            <div className="flex gap-2 mb-3">
-                <button
-                    onClick={onToggleMute}
-                    disabled={!channelId}
-                    title={isMuted ? 'Unmute' : 'Mute'}
-                    aria-label={isMuted ? 'Unmute' : 'Mute'}
-                    aria-pressed={isMuted}
-                    className="w-9 h-9 rounded-full bg-[#35373c] hover:bg-[#3f4147] disabled:opacity-50 cursor-pointer inline-flex items-center justify-center transition-all duration-150 active:scale-90"
-                >
-                    {isMuted ? <MicOff size={16} className="text-red-300" /> : <Mic size={16} className="text-gray-100" />}
-                </button>
-                <button
-                    onClick={onToggleDeafen}
-                    disabled={!channelId}
-                    title={isDeafened ? 'Activer le son entrant' : 'Couper le son entrant'}
-                    aria-label={isDeafened ? 'Activer le son entrant' : 'Couper le son entrant'}
-                    aria-pressed={isDeafened}
-                    className="w-9 h-9 rounded-full bg-[#35373c] hover:bg-[#3f4147] disabled:opacity-50 cursor-pointer inline-flex items-center justify-center transition-all duration-150 active:scale-90"
-                >
-                    <Headphones size={16} className={isDeafened ? 'text-red-300' : 'text-gray-100'} />
-                </button>
-                <button
-                    onClick={onLeave}
-                    disabled={!channelId}
-                    className="flex-1 text-xs px-2 py-2 rounded bg-red-500/90 hover:bg-red-500 disabled:opacity-50 cursor-pointer inline-flex items-center justify-center gap-1 transition-all duration-150 active:scale-95"
-                >
-                    <PhoneOff size={14} />
-                    Quitter
-                </button>
-            </div>
-
-            <button
-                onClick={onLogout}
-                className="text-xs text-red-400 hover:text-red-300 hover:underline cursor-pointer inline-flex items-center gap-1 transition-colors duration-150"
-            >
-                <LogOut size={14} />
-                Se déconnecter
-            </button>
-
-            <button
-                onClick={() => updateCheck && updateCheck()}
-                className="w-full flex items-center gap-2 text-left text-xs text-blue-400 px-2 py-1 rounded hover:bg-blue-900/30 transition-colors duration-150 mb-2"
-                style={{marginTop: 8}}
-            >
-                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Vérifier les mises à jour
             </button>
         </div>
     </div>
 );
-
