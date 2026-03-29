@@ -68,14 +68,13 @@ enum ClientMessage {
         is_muted: bool,
         is_deafened: bool,
     },
-
     #[serde(rename_all = "camelCase")]
     Chat {
         channel_id: String,
         from: String,
         username: String,
         message: String,
-        timestamp: u64, // Correction : u64 au lieu de String
+        timestamp: u64,
     },
 }
 
@@ -131,7 +130,7 @@ enum ServerMessage {
         from: String,
         username: String,
         message: String,
-        timestamp: u64, // Correction : u64 au lieu de String
+        timestamp: u64,
     },
     Error {
         message: String,
@@ -214,7 +213,7 @@ async fn remove_peer(state: &Arc<AppState>, user_id: &str) {
             &channel_id,
             &ServerMessage::PeerLeft {
                 channel_id: channel_id.clone(),
-                user_id: peer.user_id,
+                user_id: user_id.to_string(),
             },
             None,
         )
@@ -239,9 +238,9 @@ async fn main() {
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3001".to_string());
     let addr = format!("0.0.0.0:{}", port);
-    let listner = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
     println!("Signaling server on port {}", port);
-    axum::serve(listner, app).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, axum::extract::State(state): axum::extract::State<Arc<AppState>>) -> impl IntoResponse {
@@ -288,6 +287,14 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 user_id,
                 username,
             } => {
+                // 1. Nettoyer l'ancienne identité de ce socket pour éviter les zombies "Anonymous"
+                if let Some(old_id) = current_user_id.take() {
+                    if old_id != user_id {
+                        remove_peer(&state, &old_id).await;
+                    }
+                }
+
+                // 2. Kick l'ID s'il est déjà connecté ailleurs
                 remove_peer(&state, &user_id).await;
 
                 let existing_peers = {
@@ -326,18 +333,15 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 {
                     let mut channels = state.channels.lock().await;
                     let members = channels.entry(channel_id.clone()).or_default();
-                    if !members.iter().any(|id| id == &user_id) {
+                    if !members.contains(&user_id) {
                         members.push(user_id.clone());
                     }
                 }
 
-                let joined = ServerMessage::Joined {
+                let _ = tx.send(serialize_message(&ServerMessage::Joined {
                     channel_id: channel_id.clone(),
                     peers: existing_peers,
-                };
-                if let Some(payload) = serialize_message(&joined) {
-                    let _ = tx.send(payload);
-                }
+                }).unwrap());
 
                 broadcast_to_channel(
                     &state,
@@ -360,10 +364,7 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
             ClientMessage::Leave { channel_id, user_id } => {
                 let can_leave = {
                     let peers = state.peers.lock().await;
-                    peers
-                        .get(&user_id)
-                        .map(|peer| peer.channel_id == channel_id)
-                        .unwrap_or(false)
+                    peers.get(&user_id).map(|p| p.channel_id == channel_id).unwrap_or(false)
                 };
 
                 if can_leave {
@@ -374,91 +375,19 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                     current_user_id = None;
                 }
             }
-            ClientMessage::Offer {
-                channel_id,
-                from,
-                to,
-                sdp,
-            } => {
-                let from_username = {
-                    let peers = state.peers.lock().await;
-                    peers
-                        .get(&from)
-                        .map(|peer| peer.username.clone())
-                        .unwrap_or_else(|| "Unknown".to_string())
-                };
-
-                send_to_user(
-                    &state,
-                    &to,
-                    &ServerMessage::Offer {
-                        channel_id,
-                        from,
-                        from_username,
-                        sdp,
-                    },
-                )
-                .await;
+            ClientMessage::Offer { channel_id, from, to, sdp } => {
+                let from_username = state.peers.lock().await.get(&from).map(|p| p.username.clone()).unwrap_or_default();
+                send_to_user(&state, &to, &ServerMessage::Offer { channel_id, from, from_username, sdp }).await;
             }
-            ClientMessage::Answer {
-                channel_id,
-                from,
-                to,
-                sdp,
-            } => {
-                let from_username = {
-                    let peers = state.peers.lock().await;
-                    peers
-                        .get(&from)
-                        .map(|peer| peer.username.clone())
-                        .unwrap_or_else(|| "Unknown".to_string())
-                };
-
-                send_to_user(
-                    &state,
-                    &to,
-                    &ServerMessage::Answer {
-                        channel_id,
-                        from,
-                        from_username,
-                        sdp,
-                    },
-                )
-                .await;
+            ClientMessage::Answer { channel_id, from, to, sdp } => {
+                let from_username = state.peers.lock().await.get(&from).map(|p| p.username.clone()).unwrap_or_default();
+                send_to_user(&state, &to, &ServerMessage::Answer { channel_id, from, from_username, sdp }).await;
             }
-            ClientMessage::Ice {
-                channel_id,
-                from,
-                to,
-                candidate,
-            } => {
-                let from_username = {
-                    let peers = state.peers.lock().await;
-                    peers
-                        .get(&from)
-                        .map(|peer| peer.username.clone())
-                        .unwrap_or_else(|| "Unknown".to_string())
-                };
-
-                send_to_user(
-                    &state,
-                    &to,
-                    &ServerMessage::Ice {
-                        channel_id,
-                        from,
-                        from_username,
-                        candidate,
-                    },
-                )
-                .await;
+            ClientMessage::Ice { channel_id, from, to, candidate } => {
+                let from_username = state.peers.lock().await.get(&from).map(|p| p.username.clone()).unwrap_or_default();
+                send_to_user(&state, &to, &ServerMessage::Ice { channel_id, from, from_username, candidate }).await;
             }
-            ClientMessage::MediaState {
-                channel_id,
-                user_id,
-                is_muted,
-                is_deafened,
-            } => {
-                // MAJ de l'état mute/deaf côté serveur
+            ClientMessage::MediaState { channel_id, user_id, is_muted, is_deafened } => {
                 {
                     let mut peers = state.peers.lock().await;
                     if let Some(peer) = peers.get_mut(&user_id) {
@@ -466,40 +395,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         peer.is_deafened = is_deafened;
                     }
                 }
-                broadcast_to_channel(
-                    &state,
-                    &channel_id,
-                    &ServerMessage::PeerState {
-                        channel_id: channel_id.clone(),
-                        user_id: user_id.clone(),
-                        is_muted,
-                        is_deafened,
-                    },
-                    Some(&user_id),
-                )
-                .await;
+                broadcast_to_channel(&state, &channel_id, &ServerMessage::PeerState { channel_id, user_id: user_id.clone(), is_muted, is_deafened }, Some(&user_id)).await;
             }
-            // Ajout gestion du chat
-            ClientMessage::Chat {
-                channel_id,
-                from,
-                username,
-                message,
-                timestamp,
-            } => {
-                broadcast_to_channel(
-                    &state,
-                    &channel_id,
-                    &ServerMessage::Chat {
-                        channel_id: channel_id.clone(),
-                        from,
-                        username,
-                        message,
-                        timestamp,
-                    },
-                    None,
-                )
-                .await;
+            ClientMessage::Chat { channel_id, from, username, message, timestamp } => {
+                broadcast_to_channel(&state, &channel_id, &ServerMessage::Chat { channel_id, from, username, message, timestamp }, None).await;
             }
         }
     }
@@ -507,6 +406,5 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
     if let Some(user_id) = current_user_id {
         remove_peer(&state, &user_id).await;
     }
-
     send_task.abort();
 }
