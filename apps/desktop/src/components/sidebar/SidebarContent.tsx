@@ -44,12 +44,18 @@ export const SidebarContent = ({
                                     {/* Icônes de statut (Muet / Casque) */}
                                     <div className="flex items-center gap-1 flex-shrink-0">
                                         {member.isMuted && !member.isDeafened && (
-                                            <MicOff size={14} className="text-[#f23f42]" title="Muet" />
+                                            <span title="Muet">
+                                                <MicOff size={14} className="text-[#f23f42]" />
+                                            </span>
                                         )}
                                         {member.isDeafened && (
                                             <>
-                                                <MicOff size={14} className="text-[#f23f42]" title="Muet" />
-                                                <Headphones size={14} className="text-[#f23f42]" title="Sourdine" />
+                                                <span title="Muet">
+                                                    <MicOff size={14} className="text-[#f23f42]" />
+                                                </span>
+                                                <span title="Sourdine">
+                                                    <Headphones size={14} className="text-[#f23f42]" />
+                                                </span>
                                             </>
                                         )}
                                         {!member.isMuted && !member.isDeafened && (
