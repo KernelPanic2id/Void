@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "DiscordWASM",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "identifier": "com.discord.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "pnpm build:worklet && pnpm build",
     "frontendDist": "../dist"
   },
   "app": {

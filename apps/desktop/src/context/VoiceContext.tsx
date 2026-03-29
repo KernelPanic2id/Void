@@ -358,7 +358,7 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
             const dest = audioCtx.createMediaStreamDestination();
 
             // Charger le worklet (chemin relatif selon ton build)
-            await audioCtx.audioWorklet.addModule('/src/worker/noise-gate.worklet.js');
+            await audioCtx.audioWorklet.addModule('/worker/noise-gate.worklet.js');
             const node = new AudioWorkletNode(audioCtx, 'noise-gate-processor');
 
             // Envoyer les paramètres et chemins du module WASM au worklet

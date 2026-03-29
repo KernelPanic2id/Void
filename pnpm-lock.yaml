@@ -26,9 +26,6 @@ importers:
       react-dom:
         specifier: ^19.1.0
         version: 19.2.4(react@19.2.4)
-      rnnoise-wasm:
-        specifier: 0.0.1-security
-        version: 0.0.1-security
       tailwindcss:
         specifier: ^4.2.2
         version: 4.2.2
@@ -1571,9 +1568,6 @@ packages:
   retry@0.12.0:
     resolution: {integrity: sha512-9LkiTwjUh6rT555DtE9rTX+BKByPfrMzEAtnlEtdEwr3Nkffwiihqe2bWADg+OQRjt9gl6ICdmB/ZFDCGAtSow==}
     engines: {node: '>= 4'}
-
-  rnnoise-wasm@0.0.1-security:
-    resolution: {integrity: sha512-SJkZyax49+Wr6oy4dDwzP8dUGiITyApKoHPnJhOIqjOtuKF1MrP7PV2nEUX8NrgbQUmWG0qD6Nn5OCExGStrsQ==}
 
   rollup@4.60.0:
     resolution: {integrity: sha512-yqjxruMGBQJ2gG4HtjZtAfXArHomazDHoFwFFmZZl0r7Pdo7qCIXKqKHZc8yeoMgzJJ+pO6pEEHa+V7uzWlrAQ==}
@@ -3338,8 +3332,6 @@ snapshots:
       set-function-name: 2.0.2
 
   retry@0.12.0: {}
-
-  rnnoise-wasm@0.0.1-security: {}
 
   rollup@4.60.0:
     dependencies:
