@@ -33,7 +33,7 @@ export const LoginView = ({ onLogin }: LoginViewProps) => {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             className="w-full bg-[#1e1f22] p-2.5 rounded border-none text-[#dbdee1] focus:outline-none focus:ring-2 focus:ring-[#5865f2] transition-all"
-                            placeholder="Ex: Raph"
+                            placeholder="Pseudo"
                         />
                     </div>
 

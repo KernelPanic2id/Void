@@ -9,5 +9,5 @@ export default interface SidebarContentProps {
     onToggleMute: () => void;
     onToggleDeafen: () => void;
     onLogout: () => void;
+    updateCheck?: () => void;
 }
-

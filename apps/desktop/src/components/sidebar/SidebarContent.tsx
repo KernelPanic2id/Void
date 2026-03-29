@@ -12,6 +12,7 @@ export const SidebarContent = ({
     onToggleMute,
     onToggleDeafen,
     onLogout,
+    updateCheck,
 }: SidebarContentProps) => (
     <div className="flex flex-col h-full bg-[#2b2d31]">
         <div className="p-4 font-bold text-gray-400 uppercase text-[12px] tracking-wider">
@@ -110,8 +111,16 @@ export const SidebarContent = ({
                 <LogOut size={14} />
                 Se déconnecter
             </button>
+
+            <button
+                onClick={() => updateCheck && updateCheck()}
+                className="w-full flex items-center gap-2 text-left text-xs text-blue-400 px-2 py-1 rounded hover:bg-blue-900/30 transition-colors duration-150 mb-2"
+                style={{marginTop: 8}}
+            >
+                <svg width="16" height="16" fill="none" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Vérifier les mises à jour
+            </button>
         </div>
     </div>
 );
-
 
