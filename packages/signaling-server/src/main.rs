@@ -68,6 +68,15 @@ enum ClientMessage {
         is_muted: bool,
         is_deafened: bool,
     },
+
+    #[serde(rename_all = "camelCase")]
+    Chat {
+        channel_id: String,
+        from: String,
+        username: String,
+        message: String,
+        timestamp: String,
+    },
 }
 
 #[derive(Debug, Serialize)]
@@ -115,6 +124,14 @@ enum ServerMessage {
         user_id: String,
         is_muted: bool,
         is_deafened: bool,
+    },
+    #[serde(rename_all = "camelCase")]
+    Chat {
+        channel_id: String,
+        from: String,
+        username: String,
+        message: String,
+        timestamp: String,
     },
     Error {
         message: String,
@@ -459,6 +476,28 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         is_deafened,
                     },
                     Some(&user_id),
+                )
+                .await;
+            }
+            // Ajout gestion du chat
+            ClientMessage::Chat {
+                channel_id,
+                from,
+                username,
+                message,
+                timestamp,
+            } => {
+                broadcast_to_channel(
+                    &state,
+                    &channel_id,
+                    &ServerMessage::Chat {
+                        channel_id: channel_id.clone(),
+                        from,
+                        username,
+                        message,
+                        timestamp,
+                    },
+                    None,
                 )
                 .await;
             }
