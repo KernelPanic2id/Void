@@ -8,14 +8,35 @@ export const VoiceAudioRenderer = ({ stream, muted, peerId }: VoiceAudioRenderer
     const volume = userVolumes.get(peerId) ?? 1;
 
     useEffect(() => {
-        if (!audioRef.current) return;
-        if (!stream) return;
-        audioRef.current.srcObject = stream;
-        audioRef.current.muted = false; // On veut entendre le son
-        audioRef.current.volume = muted ? 0 : volume;
+        const audio = audioRef.current;
+        if (!audio || !stream) return;
+
+        if (audio.srcObject !== stream) {
+            audio.srcObject = stream;
+        }
+        
+        audio.muted = false;
+        audio.volume = muted ? 0 : volume;
+
+        const playAudio = async () => {
+            try {
+                if (audio.paused) {
+                    await audio.play();
+                }
+            } catch (err) {
+                console.warn("Échec de la lecture audio automatique:", err);
+            }
+        };
+
+        playAudio();
     }, [stream, muted, volume]);
 
     return (
-        <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
+        <audio 
+            ref={audioRef} 
+            autoPlay 
+            playsInline 
+            style={{ display: 'none' }} 
+        />
     );
 };

@@ -1,5 +1,7 @@
 import VoicePeer from './voicePeer.model';
 
+export type SidebarView = 'voice' | 'chat';
+
 export default interface SidebarContentProps {
     channelId: string | null;
     isConnected: boolean;
@@ -14,4 +16,6 @@ export default interface SidebarContentProps {
     updateCheck?: () => void;
     salons: { id: string; name: string; members: VoicePeer[] }[];
     localUserId: string;
+    activeView: SidebarView;
+    onViewChange: (view: SidebarView) => void;
 }

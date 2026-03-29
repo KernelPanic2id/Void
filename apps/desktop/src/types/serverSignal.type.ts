@@ -26,5 +26,5 @@ export type ServerSignalMessage =
         fromUsername: string;
         candidate: RTCIceCandidateInit;
     }
+    | { type: 'chat'; channelId: string; from: string; username: string; message: string; timestamp: number }
     | { type: 'error'; message: string };
-

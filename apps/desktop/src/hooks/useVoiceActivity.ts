@@ -1,13 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import AnalyzerEntry from '../models/analyzerEntry.model';
 
 const VAD_THRESHOLD = 18;
-const POLL_INTERVAL_MS = 50; // ~20fps
+const POLL_INTERVAL_MS = 100;
 
-/**
- * Hook that monitors audio streams and returns a map of which users are currently speaking.
- * Works for both remote streams (from WebRTC) and the local microphone stream.
- */
 export const useVoiceActivity = (
     remoteStreams: Map<string, MediaStream>,
     localUserId?: string,
@@ -15,113 +10,117 @@ export const useVoiceActivity = (
     isLocalMuted?: boolean,
 ): Map<string, boolean> => {
     const [speakingMap, setSpeakingMap] = useState<Map<string, boolean>>(new Map());
-    const analyzersRef = useRef<Map<string, AnalyzerEntry>>(new Map());
+    
+    const sharedAudioCtxRef = useRef<AudioContext | null>(null);
+    const analyzersRef = useRef<Map<string, { analyser: AnalyserNode, source: MediaStreamAudioSourceNode }>>(new Map());
     const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
     useEffect(() => {
+        try {
+            if (!sharedAudioCtxRef.current || sharedAudioCtxRef.current.state === 'closed') {
+                const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext);
+                if (AudioContextClass) {
+                    sharedAudioCtxRef.current = new AudioContextClass();
+                }
+            }
+        } catch (e) {
+            console.error("Failed to create AudioContext for VAD", e);
+            return;
+        }
+        
+        const ctx = sharedAudioCtxRef.current;
+        if (!ctx) return;
+
+        const currentAnalyzers = analyzersRef.current;
         const allStreams = new Map(remoteStreams);
-        // Si mute, ne pas ajouter le localStream
         if (localUserId && localStream && !isLocalMuted) {
             allStreams.set(localUserId, localStream);
         }
 
-        const currentAnalyzers = analyzersRef.current;
-
-        // Remove analyzers for streams that no longer exist
-        for (const [peerId, entry] of currentAnalyzers) {
-            if (!allStreams.has(peerId)) {
-                entry.source.disconnect();
-                entry.analyser.disconnect();
-                void entry.ctx.close();
-                currentAnalyzers.delete(peerId);
+        // Nettoyage
+        for (const [id, entry] of currentAnalyzers.entries()) {
+            if (!allStreams.has(id)) {
+                try {
+                    entry.source.disconnect();
+                    entry.analyser.disconnect();
+                } catch (e) {}
+                currentAnalyzers.delete(id);
             }
         }
 
-        // Add analyzers for new streams
-        for (const [peerId, stream] of allStreams) {
-            if (!currentAnalyzers.has(peerId) && stream.getAudioTracks().length > 0) {
+        // Création
+        for (const [id, stream] of allStreams.entries()) {
+            if (!currentAnalyzers.has(id) && stream.active && stream.getAudioTracks().length > 0) {
                 try {
-                    const ctx = new AudioContext();
+                    if (ctx.state === 'suspended') {
+                        void ctx.resume().catch(() => {});
+                    }
+                    
                     const analyser = ctx.createAnalyser();
                     analyser.fftSize = 256;
-                    analyser.smoothingTimeConstant = 0.5;
+                    analyser.smoothingTimeConstant = 0.4;
                     const source = ctx.createMediaStreamSource(stream);
                     source.connect(analyser);
-                    currentAnalyzers.set(peerId, { ctx, analyser, source });
-                } catch {
-                    // AudioContext creation can fail in edge cases
+                    currentAnalyzers.set(id, { analyser, source });
+                } catch (e) {
+                    console.warn("[useVoiceActivity] Analyser error for", id, e);
                 }
             }
         }
 
-        // Clear previous polling
-        if (intervalRef.current !== null) {
-            clearInterval(intervalRef.current);
-        }
+        if (intervalRef.current) clearInterval(intervalRef.current);
 
-        if (currentAnalyzers.size === 0) {
-            setSpeakingMap(new Map());
-            return;
-        }
+        if (currentAnalyzers.size > 0) {
+            const dataArray = new Uint8Array(128);
+            intervalRef.current = setInterval(() => {
+                const next = new Map<string, boolean>();
+                let hasChanged = false;
 
-        const dataArray = new Uint8Array(128);
-
-        intervalRef.current = setInterval(() => {
-            const next = new Map<string, boolean>();
-            for (const [peerId, entry] of currentAnalyzers) {
-                if (isLocalMuted && peerId === localUserId) {
-                    next.set(peerId, false);
-                    continue;
-                }
-                entry.analyser.getByteFrequencyData(dataArray);
-                let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i];
-                }
-                const avg = sum / dataArray.length;
-                next.set(peerId, avg > VAD_THRESHOLD);
-            }
-
-            setSpeakingMap((prev) => {
-                // Only update if something changed to avoid re-renders
-                let changed = false;
-                if (prev.size !== next.size) {
-                    changed = true;
-                } else {
-                    for (const [key, val] of next) {
-                        if (prev.get(key) !== val) {
-                            changed = true;
-                            break;
-                        }
+                for (const [id, entry] of currentAnalyzers.entries()) {
+                    let isSpeaking = false;
+                    if (!(isLocalMuted && id === localUserId)) {
+                        try {
+                            entry.analyser.getByteFrequencyData(dataArray);
+                            let sum = 0;
+                            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+                            isSpeaking = (sum / dataArray.length) > VAD_THRESHOLD;
+                        } catch (e) {}
                     }
+                    next.set(id, isSpeaking);
+                    if (next.get(id) !== speakingMap.get(id)) hasChanged = true;
                 }
-                return changed ? next : prev;
-            });
-        }, POLL_INTERVAL_MS);
+
+                if (next.size !== speakingMap.size) hasChanged = true;
+                if (hasChanged) {
+                    setSpeakingMap(next);
+                }
+            }, POLL_INTERVAL_MS);
+        } else {
+            if (speakingMap.size > 0) {
+                setSpeakingMap(new Map());
+            }
+        }
 
         return () => {
-            if (intervalRef.current !== null) {
-                clearInterval(intervalRef.current);
-                intervalRef.current = null;
-            }
+            if (intervalRef.current) clearInterval(intervalRef.current);
         };
     }, [remoteStreams, localUserId, localStream, isLocalMuted]);
 
-    // Cleanup all on unmount
     useEffect(() => {
         return () => {
+            if (intervalRef.current) clearInterval(intervalRef.current);
             for (const entry of analyzersRef.current.values()) {
-                entry.source.disconnect();
-                entry.analyser.disconnect();
-                void entry.ctx.close();
+                try {
+                    entry.source.disconnect();
+                    entry.analyser.disconnect();
+                } catch (e) {}
             }
             analyzersRef.current.clear();
-            if (intervalRef.current !== null) {
-                clearInterval(intervalRef.current);
+            if (sharedAudioCtxRef.current && sharedAudioCtxRef.current.state !== 'closed') {
+                void sharedAudioCtxRef.current.close().catch(() => {});
             }
         };
     }, []);
 
     return speakingMap;
 };
-

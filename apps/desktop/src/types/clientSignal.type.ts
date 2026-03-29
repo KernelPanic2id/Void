@@ -4,5 +4,5 @@ export type ClientSignalMessage =
     | { type: 'offer'; channelId: string; from: string; to: string; sdp: RTCSessionDescriptionInit }
     | { type: 'answer'; channelId: string; from: string; to: string; sdp: RTCSessionDescriptionInit }
     | { type: 'ice'; channelId: string; from: string; to: string; candidate: RTCIceCandidateInit }
-    | { type: 'media-state'; channelId: string; userId: string; isMuted: boolean; isDeafened: boolean };
-
+    | { type: 'media-state'; channelId: string; userId: string; isMuted: boolean; isDeafened: boolean }
+    | { type: 'chat'; channelId: string; from: string; username: string; message: string; timestamp: number };

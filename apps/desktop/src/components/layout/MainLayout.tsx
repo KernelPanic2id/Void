@@ -19,7 +19,6 @@ export const MainLayout = ({ sidebar, children, sidebarFooter, channelName }: Pr
                 <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
                     {sidebar}
                 </div>
-                {/* Suppression du padding et de la hauteur fixe pour que le Footer soit Full Width */}
                 {sidebarFooter && (
                     <div className="flex-shrink-0">
                         {sidebarFooter}
@@ -27,14 +26,14 @@ export const MainLayout = ({ sidebar, children, sidebarFooter, channelName }: Pr
                 )}
             </aside>
 
-            {/* Zone Principale (Stream) */}
+            {/* Zone Principale */}
             <main className="flex-1 flex flex-col bg-[#313338] min-w-0">
-                <header className="h-12 flex items-center px-6 border-b border-[#1f2124] shadow-sm bg-[#313338]">
+                <header className="h-12 flex items-center px-4 border-b border-[#1f2124] shadow-sm bg-[#313338] flex-shrink-0">
                     <span className="text-gray-400 mr-2 font-bold text-xl">#</span>
-                    <h1 className="font-semibold text-white text-lg">{channelName || 'vocal-general'}</h1>
+                    <h1 className="font-semibold text-white text-[15px]">{channelName || 'vocal-general'}</h1>
                 </header>
 
-                <div className="flex-1 p-4 overflow-y-auto overflow-x-hidden">
+                <div className="flex-1 min-h-0 relative">
                     {children}
                 </div>
             </main>
