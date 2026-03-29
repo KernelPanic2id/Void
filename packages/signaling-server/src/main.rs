@@ -287,14 +287,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 user_id,
                 username,
             } => {
-                // 1. Nettoyer l'ancienne identité de ce socket pour éviter les zombies "Anonymous"
                 if let Some(old_id) = current_user_id.take() {
                     if old_id != user_id {
                         remove_peer(&state, &old_id).await;
                     }
                 }
-
-                // 2. Kick l'ID s'il est déjà connecté ailleurs
                 remove_peer(&state, &user_id).await;
 
                 let existing_peers = {
@@ -395,10 +392,10 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                         peer.is_deafened = is_deafened;
                     }
                 }
-                broadcast_to_channel(&state, &channel_id, &ServerMessage::PeerState { channel_id, user_id: user_id.clone(), is_muted, is_deafened }, Some(&user_id)).await;
+                broadcast_to_channel(&state, &channel_id, &ServerMessage::PeerState { channel_id: channel_id.clone(), user_id: user_id.clone(), is_muted, is_deafened }, Some(&user_id)).await;
             }
             ClientMessage::Chat { channel_id, from, username, message, timestamp } => {
-                broadcast_to_channel(&state, &channel_id, &ServerMessage::Chat { channel_id, from, username, message, timestamp }, None).await;
+                broadcast_to_channel(&state, &channel_id, &ServerMessage::Chat { channel_id: channel_id.clone(), from, username, message, timestamp }, None).await;
             }
         }
     }
