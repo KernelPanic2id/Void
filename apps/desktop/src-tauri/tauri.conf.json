@@ -21,6 +21,11 @@
       "csp": null
     }
   },
+  "tauri": {
+    "security": {
+      "dangerousRemoteHttpAllowlist": ["
+    }
+  },
   "plugins": {
     "updater": {
       "active": true,

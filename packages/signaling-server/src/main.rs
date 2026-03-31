@@ -5,6 +5,10 @@ use axum::{
     Router,
 };
 
+use axum_server::tls_rustls::RustlsConfig as ax_server;
+use std::path::PathBuf;
+use std::net::SocketAddr;
+
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
@@ -247,12 +251,25 @@ async fn main() {
         .route("/health", get(|| async { "ok" }))
         .layer(CorsLayer::permissive())
         .with_state(app_state);
+    // -----Config TLS-----
+
+    let config = ax_server::from_pem_file(
+        PathBuf::from("cert.pem"),
+        PathBuf::from("key.pem"),
+    )
+    .await
+    .expect("Impossible de trouver le cert.pem ou key.pem");
 
     let port = std::env::var("PORT").unwrap_or_else(|_| "3001".to_string());
-    let addr = format!("0.0.0.0:{}", port);
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    println!("Signaling server on port {}", port);
-    axum::serve(listener, app).await.unwrap();
+    let addr: SocketAddr = format!( "0.0.0.0:{}", port).parse().unwrap();
+
+    println!("Server sécurrisé lancé sur https://{}", addr);
+    println!("Websocket sécurisé disponnible sur wss://{}/ws", addr);
+
+    axum_server::bind_rustls(addr, config)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, axum::extract::State(state): axum::extract::State<Arc<AppState>>) -> impl IntoResponse {
