@@ -1,28 +1,46 @@
-- name: Extract, Build and Restart Docker container
-    uses: appleboy/ssh-action@master
-    with:
-      host: ${{ secrets.ORACLE_HOST }}
-      username: ubuntu
-      key: ${{ secrets.ORACLE_SSH_KEY }}
-      script: |
-        # Extraction
-        mkdir -p ~/discordWASM
-        tar -xzvf ~/discordWASM-deploy/deploy.tar.gz -C ~/discordWASM
-        cd ~/discordWASM
-        
-        # Injection des secrets pour le build Docker
-        export PRIMARY_PIN_HASH="${{ secrets.PRIMARY_PIN_HASH }}"
-        export BACKUP_PIN_HASH="${{ secrets.BACKUP_PIN_HASH }}"
-        
-        # Déploiement avec héritage des variables (-E)
-        if sudo docker compose version &> /dev/null; then
+- name: Archive project for transfer
+    run: |
+      # On crée l'archive directement dans le répertoire de travail pour que scp-action le trouve
+      tar -czvf deploy.tar.gz \
+        --exclude='target' \
+        --exclude='node_modules' \
+        --exclude='.git' \
+        --exclude='apps/desktop/src-tauri/target' \
+        --exclude='apps/desktop/dist' \
+        .
+
+    - name: Copy archive to Oracle VM
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.ORACLE_HOST }}
+        username: ubuntu
+        key: ${{ secrets.ORACLE_SSH_KEY }}
+        source: "deploy.tar.gz"
+        target: "/home/ubuntu/discordWASM-deploy"
+
+    - name: Extract, Build and Restart
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.ORACLE_HOST }}
+        username: ubuntu
+        key: ${{ secrets.ORACLE_SSH_KEY }}
+        script: |
+          # 1. Préparation des dossiers
+          mkdir -p ~/discordWASM
+          mkdir -p ~/discordWASM-deploy
+          
+          # 2. Extraction (on force l'écrasement pour mettre à jour le code)
+          tar -xzvf ~/discordWASM-deploy/deploy.tar.gz -C ~/discordWASM
+          cd ~/discordWASM
+          
+          # 3. Injection des Secrets (indispensable pour env!() et Dockerfile ARG)
+          export PRIMARY_PIN_HASH="${{ secrets.PRIMARY_PIN_HASH }}"
+          export BACKUP_PIN_HASH="${{ secrets.BACKUP_PIN_HASH }}"
+          
+          # 4. Build et Up avec héritage des variables (-E)
+          # On utilise le nom du service défini dans ton docker-compose
           sudo -E docker compose up -d --build signaling-server
-        else
-          sudo -E docker-compose up -d --build signaling-server
-        fi
-        
-        # Nettoyage des anciennes images inutilisées (évite saturation disque VM)
-        sudo docker image prune -f
-        
-        # Ménage archive
-        rm -f ~/discordWASM-deploy/deploy.tar.gz
+          
+          # 5. Cleanup
+          sudo docker image prune -f
+          rm -f ~/discordWASM-deploy/deploy.tar.gz
