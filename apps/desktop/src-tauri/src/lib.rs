@@ -11,7 +11,7 @@ use rustls_pki_types::{CertificateDer, UnixTime, ServerName};
 // --- CONFIGURATION PINNING ---
 const PRIMARY_PIN: &str = match option_env!("PRIMARY_PIN_HASH") {
     Some(v) => v,
-    None => "JZnp4wOHrwvdpPtDzwptWkD//NH4oiGY2rP/3GmAZWI=", // Dev fallback to actual server hash
+    None => "DEV_PIN",
 };
 
 const BACKUP_PIN: &str = match option_env!("BACKUP_PIN_HASH") {

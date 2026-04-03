@@ -13,26 +13,6 @@ window.addEventListener('unhandledrejection', (event) => {
   error(`Unhandled rejection: ${event.reason}`);
 });
 
-// Helper for safe serializing of logs (to prevent Circular Structure errors)
-const safeFormat = (arg: any) => {
-  if (typeof arg === 'string') return arg;
-  if (arg instanceof Error) return arg.stack || arg.message;
-  try {
-    const cache = new Set();
-    return JSON.stringify(arg, (key, value) => {
-      if (typeof value === 'object' && value !== null) {
-        if (cache.has(value)) {
-          return '[Circular]';
-        }
-        cache.add(value);
-      }
-      return value;
-    });
-  } catch (err) {
-    return String(arg);
-  }
-};
-
 // Alias console functions to Tauri log plugin
 const originalConsoleLog = console.log;
 const originalConsoleInfo = console.info;
@@ -42,32 +22,32 @@ const originalConsoleDebug = console.debug;
 const originalConsoleTrace = console.trace;
 
 console.log = (...args) => {
-  info(args.map(safeFormat).join(' '));
+  info(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
   originalConsoleLog(...args);
 };
 
 console.info = (...args) => {
-  info(args.map(safeFormat).join(' '));
+  info(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
   originalConsoleInfo(...args);
 };
 
 console.warn = (...args) => {
-  warn(args.map(safeFormat).join(' '));
+  warn(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
   originalConsoleWarn(...args);
 };
 
 console.error = (...args) => {
-  error(args.map(safeFormat).join(' '));
+  error(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
   originalConsoleError(...args);
 };
 
 console.debug = (...args) => {
-  debug(args.map(safeFormat).join(' '));
+  debug(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
   originalConsoleDebug(...args);
 };
 
 console.trace = (...args) => {
-  trace(args.map(safeFormat).join(' '));
+  trace(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
   originalConsoleTrace(...args);
 };
 
