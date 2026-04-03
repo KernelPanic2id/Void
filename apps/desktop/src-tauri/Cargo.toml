@@ -33,3 +33,5 @@ base64 = "0.22"
 
 # Asynchrone
 tokio = { version = "1", features = ["full"] }
+tauri-plugin-websocket = "2.4.2"
+tokio-tungstenite = { version = "0.28.0", features = ["rustls", "connect", "__rustls-tls"] }
