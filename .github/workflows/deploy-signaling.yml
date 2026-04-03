@@ -22,6 +22,7 @@ jobs:
         run: |
           # Create an archive, excluding unnecessary large folders like target/ and node_modules/
           tar -czvf deploy.tar.gz \
+            --exclude='deploy.tar.gz' \
             --exclude='target' \
             --exclude='node_modules' \
             --exclude='.git' \
