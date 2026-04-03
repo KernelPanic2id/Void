@@ -64,7 +64,6 @@ struct PeerSession {
     peer_connection: Option<Arc<RTCPeerConnection>>,
 }
 
-
 /// Incoming messages from the Client (Frontend)
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "kebab-case")]
