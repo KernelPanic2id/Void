@@ -9,9 +9,13 @@ use rustls::{DigitallySignedStruct, Error, SignatureScheme};
 // Importation depuis la crate pki-types directement (plus stable)
 use rustls_pki_types::{CertificateDer, UnixTime, ServerName};
 // --- CONFIGURATION PINNING ---
+// Note: L'empreinte (hash) d'un certificat public n'est PAS une donnée sensible.
+// Tout le monde peut voir le certificat en se connectant au serveur.
+// C'est la clé *privée* du serveur qu'il faut protéger, pas le PIN du client.
+// Il est donc 100% sûr de hardcoder ce hash ici pour que l'EXE fonctionne du premier coup !
 const PRIMARY_PIN: &str = match option_env!("PRIMARY_PIN_HASH") {
     Some(v) => v,
-    None => "DEV_PIN",
+    None => "JZnp4wOHrwvdpPtDzwptWkD//NH4oiGY2rP/3GmAZWI=",
 };
 
 const BACKUP_PIN: &str = match option_env!("BACKUP_PIN_HASH") {
