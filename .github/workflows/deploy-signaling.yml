@@ -14,15 +14,21 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.88.0
+
+      - name: Build Signaling Server
+        run: cargo build --release -p signaling-server
+
       - name: Archive project for transfer
         run: |
-          # Création de l'archive uniquement avec les fichiers nécessaires au backend
+          # On ne package QUE le binaire pré-compilé et les fichiers Docker !
           tar -czvf ../deploy.tar.gz \
-            --exclude='target' \
-            --exclude='node_modules' \
-            docker-compose.yml Dockerfile Cargo.toml Cargo.lock packages/
+            docker-compose.yml Dockerfile target/release/signaling-server
             
-          # On la déplace ensuite dans le workspace pour l'étape de copie (scp)
+          # On la déplace ensuite dans le workspace
           mv ../deploy.tar.gz ./deploy.tar.gz
 
       - name: Copy archive to Oracle VM
