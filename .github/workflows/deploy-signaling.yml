@@ -1,46 +1,63 @@
-- name: Archive project for transfer
-    run: |
-      # On crée l'archive directement dans le répertoire de travail pour que scp-action le trouve
-      tar -czvf deploy.tar.gz \
-        --exclude='target' \
-        --exclude='node_modules' \
-        --exclude='.git' \
-        --exclude='apps/desktop/src-tauri/target' \
-        --exclude='apps/desktop/dist' \
-        .
+name: Deploy Signaling Server
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/signaling-server/**'
+      - '.github/workflows/deploy-signaling.yml'
 
-    - name: Copy archive to Oracle VM
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.ORACLE_HOST }}
-        username: ubuntu
-        key: ${{ secrets.ORACLE_SSH_KEY }}
-        source: "deploy.tar.gz"
-        target: "/home/ubuntu/discordWASM-deploy"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Extract, Build and Restart
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.ORACLE_HOST }}
-        username: ubuntu
-        key: ${{ secrets.ORACLE_SSH_KEY }}
-        script: |
-          # 1. Préparation des dossiers
-          mkdir -p ~/discordWASM
-          mkdir -p ~/discordWASM-deploy
-          
-          # 2. Extraction (on force l'écrasement pour mettre à jour le code)
-          tar -xzvf ~/discordWASM-deploy/deploy.tar.gz -C ~/discordWASM
-          cd ~/discordWASM
-          
-          # 3. Injection des Secrets (indispensable pour env!() et Dockerfile ARG)
-          export PRIMARY_PIN_HASH="${{ secrets.PRIMARY_PIN_HASH }}"
-          export BACKUP_PIN_HASH="${{ secrets.BACKUP_PIN_HASH }}"
-          
-          # 4. Build et Up avec héritage des variables (-E)
-          # On utilise le nom du service défini dans ton docker-compose
-          sudo -E docker compose up -d --build signaling-server
-          
-          # 5. Cleanup
-          sudo docker image prune -f
-          rm -f ~/discordWASM-deploy/deploy.tar.gz
+      - name: Archive project for transfer
+        run: |
+          # On crée l'archive à la racine du workspace
+          tar -czvf deploy.tar.gz \
+            --exclude='target' \
+            --exclude='node_modules' \
+            --exclude='.git' \
+            --exclude='apps/desktop/src-tauri/target' \
+            --exclude='apps/desktop/dist' \
+            .
+
+      - name: Copy archive to Oracle VM
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          source: "deploy.tar.gz"
+          target: "/home/ubuntu/discordWASM-deploy"
+
+      - name: Extract, Build and Restart
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ubuntu
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            # 1. Préparation des dossiers
+            mkdir -p ~/discordWASM
+            mkdir -p ~/discordWASM-deploy
+            
+            # 2. Extraction (on force l'écrasement pour mettre à jour le code)
+            tar -xzvf ~/discordWASM-deploy/deploy.tar.gz -C ~/discordWASM
+            cd ~/discordWASM
+            
+            # 3. Injection des Secrets (indispensable pour env!() et Dockerfile ARG)
+            export PRIMARY_PIN_HASH="${{ secrets.PRIMARY_PIN_HASH }}"
+            export BACKUP_PIN_HASH="${{ secrets.BACKUP_PIN_HASH }}"
+            
+            # 4. Build et Up avec héritage des variables (-E)
+            # On utilise le nom du service défini dans ton docker-compose
+            sudo -E docker compose up -d --build signaling-server
+            
+            # 5. Cleanup approfondi pour éviter la saturation du disque
+            sudo docker image prune -f
+            sudo docker builder prune -f
+            rm -f ~/discordWASM-deploy/deploy.tar.gz
