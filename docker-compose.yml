@@ -1,8 +1,17 @@
 services:
   signaling-server:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # On lie les arguments du Dockerfile aux variables d'env de la VM
+        - PRIMARY_PIN_HASH=${PRIMARY_PIN_HASH}
+        - BACKUP_PIN_HASH=${BACKUP_PIN_HASH}
     image: signaling-server
     container_name: signaling-live
-    network_mode: "host"
+    network_mode: "host" # Crucial pour le WebRTC (évite le mapping de ports UDP)
     restart: always
-
+    volumes:
+      # Injection des certificats depuis la VM vers le container
+      - /home/ubuntu/secrets/primary.pem:/app/cert.pem:ro
+      - /home/ubuntu/secrets/primary.key:/app/key.pem:ro
