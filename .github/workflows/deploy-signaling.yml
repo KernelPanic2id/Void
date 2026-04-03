@@ -32,32 +32,34 @@ jobs:
           username: ubuntu
           key: ${{ secrets.ORACLE_SSH_KEY }}
           source: "deploy.tar.gz"
-          target: "/home/ubuntu/discordWASM-deploy"
+          target: "/home/ubuntu/discordWASM"
 
       - name: Extract, Build and Restart
         uses: appleboy/ssh-action@master
+        env:
+          PRIMARY_PIN_HASH: ${{ secrets.PRIMARY_PIN_HASH }}
+          BACKUP_PIN_HASH: ${{ secrets.BACKUP_PIN_HASH }}
         with:
           host: ${{ secrets.ORACLE_HOST }}
           username: ubuntu
           key: ${{ secrets.ORACLE_SSH_KEY }}
+          envs: PRIMARY_PIN_HASH,BACKUP_PIN_HASH
           script: |
-            # 1. Préparation des dossiers
+            # 1. Préparation du dossier
             mkdir -p ~/discordWASM
-            mkdir -p ~/discordWASM-deploy
             
             # 2. Extraction (on force l'écrasement pour mettre à jour le code)
-            tar -xzvf ~/discordWASM-deploy/deploy.tar.gz -C ~/discordWASM
+            tar -xzvf ~/discordWASM/deploy.tar.gz -C ~/discordWASM
             cd ~/discordWASM
             
-            # 3. Injection des Secrets via fichier .env (sécurisé et géré par Docker)
-            echo "PRIMARY_PIN_HASH=${{ secrets.PRIMARY_PIN_HASH }}" > .env
-            echo "BACKUP_PIN_HASH=${{ secrets.BACKUP_PIN_HASH }}" >> .env
+            # 3. Injection des Secrets via fichier .env de manière sécurisée
+            echo "PRIMARY_PIN_HASH='${PRIMARY_PIN_HASH}'" > .env
+            echo "BACKUP_PIN_HASH='${BACKUP_PIN_HASH}'" >> .env
             
-            # 4. Build et relance
-            # On fallback sur docker-compose (v1) si docker compose (v2 plug-in) n'est pas dispo
-            sudo docker compose up -d --build signaling-server || sudo docker-compose up -d --build signaling-server
+            # 4. Build et relance (avec docker compose natif direct)
+            sudo docker compose up -d --build signaling-server
             
             # 5. Cleanup approfondi pour éviter la saturation du disque
             sudo docker image prune -f
             sudo docker builder prune -f
-            rm -f ~/discordWASM-deploy/deploy.tar.gz
+            rm -f ~/discordWASM/deploy.tar.gz
