@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   signaling-server:
     build:
@@ -10,7 +8,7 @@ services:
         BACKUP_PIN_HASH: ${BACKUP_PIN_HASH}
     image: signaling-server
     container_name: signaling-live
-    network_mode: "host"  # ⚠️ Crucial pour WebRTC UDP
+    network_mode: "host" # ⚠️ Crucial pour WebRTC UDP
     restart: always
     volumes:
       - /home/ubuntu/secrets/primary.pem:/app/cert.pem:ro
@@ -39,20 +37,21 @@ services:
       - '--web.enable-lifecycle'
     restart: unless-stopped
     networks:
-        - discordwasm-network
+      - discordwasm-network
     depends_on:
       - signaling-server
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:10.2.0
     container_name: grafana
     restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
-      - grafana-data:/var/lib/grafana
-      - ./docker/grafana/provisionning/datasources:/etc/grafana/provisionning/datasources:ro
-      - ./docker/grafana/provisionning/dashboards:/etc/grafana/provisionning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+      # Note: 'provisioning' prend un seul 'n' en anglais
+      - ./docker/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./docker/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -76,16 +75,18 @@ services:
       - '--storage.path=/alertmanager'
     restart: unless-stopped
     networks:
-        - discordwasm-network
+      - discordwasm-network
 
+# Déclaration des volumes (Noms identiques aux services)
 volumes:
-  grafana-data:
+  grafana_data:
     driver: local
-  prometheus-data:
+  prometheus_data:
     driver: local
-  alertmanager-data:
+  alertmanager_data:
     driver: local
 
+# Déclaration du réseau
 networks:
   discordwasm-network:
     driver: bridge

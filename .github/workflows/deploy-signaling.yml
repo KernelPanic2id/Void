@@ -123,43 +123,43 @@ jobs:
             echo "=== Vérification des services ==="
             # Backend
             if curl -fk --max-time 10 https://localhost:3001/health; then
-              echo "✅ Signaling Server: OK"
+              echo " Signaling Server: OK"
             else
-              echo "❌ Signaling Server: FAILED"
+              echo "Signaling Server: FAILED"
               sudo docker compose --env-file .env logs --tail=50 signaling-server
               exit 1
             fi
 
             # Prometheus
             if curl -s --max-time 10 http://localhost:9090/-/healthy | grep -q "Prometheus Server is Healthy"; then
-              echo "✅ Prometheus: OK"
+              echo "Prometheus: OK"
             else
-              echo "❌ Prometheus: FAILED"
+              echo "Prometheus: FAILED"
               sudo docker compose --env-file .env logs --tail=50 prometheus
               exit 1
             fi
 
             # Grafana
             if curl -s --max-time 10 http://localhost:3000/api/health | grep -q "ok"; then
-              echo "✅ Grafana: OK"
+              echo "Grafana: OK"
             else
-              echo "❌ Grafana: FAILED"
+              echo "Grafana: FAILED"
               sudo docker compose --env-file .env logs --tail=50 grafana
               exit 1
             fi
 
             # Alertmanager
             if curl -s --max-time 10 http://localhost:9093/-/healthy | grep -q "Healthy"; then
-              echo "✅ Alertmanager: OK"
+              echo "Alertmanager: OK"
             else
-              echo "❌ Alertmanager: FAILED"
+              echo "Alertmanager: FAILED"
               sudo docker compose --env-file .env logs --tail=50 alertmanager
               exit 1
             fi
 
             echo "=== Nettoyage Docker ==="
             sudo docker image prune -f
-            echo "🚀 Déploiement réussi !"
+            echo "Déploiement réussi !"
 
   notify:
     needs: build-and-deploy
