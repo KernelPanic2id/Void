@@ -24,6 +24,7 @@ services:
   prometheus:
     image: prom/prometheus:v2.47.0
     container_name: prometheus
+    network_mode: "host" # Permet d'accéder à localhost:9100 pour node-exporter
     ports:
       - "9090:9090"
     volumes:

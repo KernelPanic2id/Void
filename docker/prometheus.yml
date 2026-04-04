@@ -21,7 +21,7 @@ scrape_configs:
     tls_config:
       insecure_skip_verify: true
     static_configs:
-      - targets: ['signaling-server:3001']  # ← Nom du conteneur
+      - targets: ['89.168.59.45:3001']  # ← Nom du conteneur
     metrics_path: '/metrics'
     scrape_interval: 5s
 
