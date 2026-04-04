@@ -42,21 +42,25 @@ services:
       - signaling-server
 
   grafana:
-    image: grafana/grafana:10.2.0
+    image: grafana/grafana:latest
     container_name: grafana
+    restart: unless-stopped
     ports:
       - "3000:3000"
     volumes:
-      - grafana_data:/var/lib/grafana
-      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisionning/datasources:/etc/grafana/provisionning/datasources:ro
+      - ./docker/grafana/provisionning/dashboards:/etc/grafana/provisionning/dashboards:ro
     environment:
       - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
+      - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
-    restart: unless-stopped
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
     depends_on:
       - prometheus
-
+    networks:
+      - discordwasm-network
+      -
   alertmanager:
     image: prom/alertmanager:v0.26.0
     container_name: alertmanager
