@@ -1,12 +1,10 @@
-# packages/signaling-server/Dockerfile
-# Image de base légère (Debian Bookworm)
-FROM debian:bookworm-slim
+# Image de base plus récente avec GLIBC 2.38+
+FROM debian:trixie-slim
 
 # Installation des dépendances minimales pour l'exécution (SSL/Certificats)
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     libssl3 \
-    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
