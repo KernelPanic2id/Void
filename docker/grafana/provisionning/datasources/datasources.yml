@@ -9,7 +9,6 @@ datasources:
     editable: true
     jsonData:
       timeInterval: "5s"
-      httpMethod: POST
 
   - name: Alertmanager
     type: alertmanager
