@@ -38,6 +38,8 @@ services:
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
     restart: unless-stopped
+    networks:
+        - discordwasm-network
     depends_on:
       - signaling-server
 
@@ -73,11 +75,16 @@ services:
       - '--config.file=/etc/alertmanager/alertmanager.yml'
       - '--storage.path=/alertmanager'
     restart: unless-stopped
+    networks:
+        - discordwasm-network
 
 volumes:
-  prometheus_data:
-  grafana_data:
-  alertmanager_data:
+  grafana-data:
+    driver: local
+  prometheus-data:
+    driver: local
+  alertmanager-data:
+    driver: local
 
 networks:
   discordwasm-network:
