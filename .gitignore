@@ -17,6 +17,7 @@ src-tauri/target/
 .idea/
 .vscode/
 *.swp
+AGENTS.md
 
 #Certificate 
 .cert

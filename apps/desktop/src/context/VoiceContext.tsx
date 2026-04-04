@@ -4,10 +4,12 @@ import { ServerSignal } from '../types/serverSignal.type';
 import VoicePeer from '../models/voicePeer.model';
 import ChatMessage from '../models/chatMessage.model';
 import ExtendedVoiceState from '../models/extendedVoiceState.model';
-import initWasm, { calculate_network_quality } from '../pkg/core_wasm';
+import initWasm from '../pkg/core_wasm';
 import { invoke } from '@tauri-apps/api/core';
 import WebSocket from '@tauri-apps/plugin-websocket';
 import { useToast } from './ToastContext';
+import { useNetworkStats } from '../hooks/useNetworkStats';
+import { usePushToTalk } from '../hooks/usePushToTalk';
 
 const RAW_URL = import.meta.env.VITE_SIGNALING_URL || "wss://127.0.0.1:3001/ws";
 const SIGNALING_URL = RAW_URL.replace(/^["']/, "").replace(/["']$/, "").trim();
@@ -32,9 +34,8 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [userVolumes, setUserVolumes] = useState<Map<string, number>>(new Map());
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [bandwidthStats, setBandwidthStats] = useState<Map<string, number>>(new Map());
 
-    const [networkQuality, setNetworkQuality] = useState<0 | 1 | 2 | 3>(3);
-    const [ping, setPing] = useState<number>(0);
     const [wasmReady, setWasmReady] = useState(false);
 
     const [localUserId, setLocalUserId] = useState<string>("");
@@ -50,6 +51,7 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
     const localStreamRef = useRef<MediaStream | null>(null);
     const localAudioCtxRef = useRef<AudioContext | null>(null);
     const screenStreamRef = useRef<MediaStream | null>(null);
+    const noiseGateNodeRef = useRef<AudioWorkletNode | null>(null);
     
     // SFU: Single connection to the server
     const sfuConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -60,9 +62,47 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
     const signalQueueRef = useRef<ClientSignalMessage[]>([]);
 
     const [smartGateEnabled, setSmartGateEnabled] = useState(true);
+    const [vadAuto, setVadAuto] = useState(() => localStorage.getItem('vadAuto') !== 'false');
+    const [vadThreshold, setVadThreshold] = useState(() => Number(localStorage.getItem('vadThreshold')) || 0.13);
+    const [vadMode, setVadMode] = useState<'VAD' | 'PTT'>(() => (localStorage.getItem('vadMode') as 'VAD' | 'PTT') || 'VAD');
+    const [pttKey, setPttKey] = useState(() => localStorage.getItem('pttKey') || 'KeyV');
+    
+    // Add rawMicVolumeRef for SettingsModal
+    const rawMicVolumeRef = useRef<number>(0);
+    
+    useEffect(() => { localStorage.setItem('vadAuto', vadAuto.toString()); }, [vadAuto]);
+    useEffect(() => { localStorage.setItem('vadThreshold', vadThreshold.toString()); }, [vadThreshold]);
+    useEffect(() => { localStorage.setItem('vadMode', vadMode); }, [vadMode]);
+    useEffect(() => { localStorage.setItem('pttKey', pttKey); }, [pttKey]);
+
+    const { isPttActive, enforceTrackEnabled } = usePushToTalk({
+        vadMode,
+        pttKey,
+        isMuted,
+        localStreamRef,
+    });
+
+    const [voiceAvatar, setVoiceAvatar] = useState<string | null>(() => localStorage.getItem('voiceAvatar') || null);
+    useEffect(() => { if (voiceAvatar) localStorage.setItem('voiceAvatar', voiceAvatar); else localStorage.removeItem('voiceAvatar'); }, [voiceAvatar]);
 
     useEffect(() => { userIdRef.current = localUserId; }, [localUserId]);
     useEffect(() => { usernameRef.current = localUsername; }, [localUsername]);
+
+    // Send threshold updates dynamically to the gate
+    useEffect(() => {
+        if (noiseGateNodeRef.current) {
+            const db = (vadThreshold * 100) - 100;
+            // S'il est en détection automatique, on abaisse le seuil de base à un niveau extrêmement bas (laissant passer RNNoise)
+            const activeDb = vadAuto ? -80 : db;
+            const linearThreshold = Math.pow(10, activeDb / 20);
+
+            noiseGateNodeRef.current.port.postMessage({
+                type: 'UPDATE_THRESHOLD',
+                threshold: linearThreshold,
+                autoMode: vadAuto
+            });
+        }
+    }, [vadThreshold, vadAuto]);
 
     const sendSignal = useCallback(async (payload: ClientSignalMessage) => {
         if (socketRef.current) {
@@ -246,6 +286,12 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
                         return [...prev, { id, from: msg.from, username: msg.username, message: msg.message, timestamp: Number(msg.timestamp) }];
                     });
                     break;
+                case 'stats':
+                    setBandwidthStats(prev => new Map(prev).set(msg.userId, msg.bandwidthBps));
+                    break;
+                case 'error':
+                    setError(msg.message);
+                    break;
             }
         } catch (e) { console.error("Signal parsing error:", e); }
     }, [connectSFU, sendSignal, addToast]);
@@ -305,24 +351,24 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
 
     const toggleMute = useCallback(() => {
         const next = !isMuted;
-        if (localStreamRef.current) localStreamRef.current.getAudioTracks().forEach(t => t.enabled = !next);
         setIsMuted(next);
+        enforceTrackEnabled();
         setParticipants(p => p.map(part => part.userId === userIdRef.current ? { ...part, isMuted: next } : part));
         if (channelIdRef.current) {
             sendSignal({ type: 'media-state', channelId: channelIdRef.current, userId: userIdRef.current, isMuted: next, isDeafened });
         }
-    }, [isMuted, isDeafened, sendSignal]);
+    }, [isMuted, isDeafened, sendSignal, enforceTrackEnabled]);
 
     const toggleDeafen = useCallback(() => {
         const next = !isDeafened;
         const nextMute = next || isMuted;
         setIsDeafened(next);
+        enforceTrackEnabled();
         setParticipants(p => p.map(part => part.userId === userIdRef.current ? { ...part, isDeafened: next, isMuted: nextMute } : part));
-        if (localStreamRef.current) localStreamRef.current.getAudioTracks().forEach(t => t.enabled = !nextMute);
         if (channelIdRef.current) {
             sendSignal({ type: 'media-state', channelId: channelIdRef.current, userId: userIdRef.current, isMuted: nextMute, isDeafened: next });
         }
-    }, [isDeafened, isMuted, sendSignal]);
+    }, [isDeafened, isMuted, sendSignal, enforceTrackEnabled]);
 
     const joinChannel = useCallback(async (nextChannelId: string, username: string) => {
         if (!nextChannelId || nextChannelId === channelIdRef.current) return;
@@ -342,14 +388,28 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
 
             await audioCtx.audioWorklet.addModule('/worker/noise-gate.worklet.js');
             const noiseGateNode = new AudioWorkletNode(audioCtx, 'noise-gate-processor');
+            noiseGateNodeRef.current = noiseGateNode;
             
+            const wasmRes = await fetch('/pkg/core_wasm_bg.wasm');
+            const wasmBuffer = await wasmRes.arrayBuffer();
+
+            noiseGateNode.port.onmessage = (event) => {
+                if (event.data.type === 'volume') {
+                    rawMicVolumeRef.current = event.data.volume;
+                }
+            };
+
+            const db = (vadThreshold * 100) - 100;
+            const activeDb = vadAuto ? -80 : db;
+            const linearThreshold = Math.pow(10, activeDb / 20);
+
             noiseGateNode.port.postMessage({
                 type: 'INIT_WASM',
-                wasmJsPath: '/pkg/core_wasm.js',
-                wasmBinPath: '/pkg/core_wasm_bg.wasm',
-                threshold: 0.13,
+                wasmBuffer: wasmBuffer,
+                threshold: linearThreshold,
                 attack: 0.01,
-                release: 0.1
+                release: 0.1,
+                autoMode: vadAuto
             });
 
             if (smartGateEnabled) {
@@ -386,6 +446,8 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
             localAudioCtxRef.current.close();
             localAudioCtxRef.current = null;
         }
+        
+        noiseGateNodeRef.current = null;
 
         if (localStreamRef.current) localStreamRef.current.getTracks().forEach(t => t.stop());
         localStreamRef.current = null;
@@ -421,76 +483,30 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         };
     }, []);
 
-    useEffect(() => {
-        if (!isConnected || !wasmReady) return;
-        const interval = setInterval(async () => {
-            try {
-                let totalRTT = 0, count = 0, totalLoss = 0, totalJitter = 0;
-                const pc = sfuConnectionRef.current;
-                if (pc && (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed')) {
-                    const stats = await pc.getStats();
-                    let candidatePairRTT: number | undefined;
-
-                    stats.forEach(r => {
-                        // Gather candidate-pair RTT as fallback
-                        if (r.type === 'candidate-pair' && (r.state === 'succeeded' || r.nominated) && r.currentRoundTripTime !== undefined) {
-                            candidatePairRTT = r.currentRoundTripTime * 1000;
-                        }
-                        if (r.type === 'remote-inbound-rtp' && r.roundTripTime !== undefined) { 
-                            totalRTT += r.roundTripTime * 1000; 
-                            count++; 
-                        }
-                        if (r.type === 'inbound-rtp' && r.kind === 'audio') {
-                            const total = (r.packetsLost || 0) + (r.packetsReceived || 0);
-                            if (total > 0) {
-                                totalLoss += (r.packetsLost || 0) / total;
-                            }
-                            if (r.jitter !== undefined) totalJitter += r.jitter * 1000;
-                        }
-                    });
-
-                    const countDiv = Math.max(1, count);
-                    let finalRTT = 0;
-                    if (count > 0) {
-                        finalRTT = totalRTT / count;
-                    } else if (candidatePairRTT !== undefined) {
-                        finalRTT = candidatePairRTT;
-                    } else {
-                        // Ultime fallback: chercher n'importe quel RTT dans les stats
-                        stats.forEach(r => {
-                            if (r.roundTripTime !== undefined) finalRTT = r.roundTripTime * 1000;
-                            else if (r.currentRoundTripTime !== undefined) finalRTT = r.currentRoundTripTime * 1000;
-                        });
-                    }
-
-                    if (finalRTT > 0) {
-                        setPing(Math.max(1, Math.round(finalRTT)));
-                        if (typeof calculate_network_quality === 'function') {
-                            setNetworkQuality(calculate_network_quality(finalRTT, totalLoss / countDiv, totalJitter / countDiv) as 0 | 1 | 2 | 3);
-                        }
-                    }
-                }
-            } catch (e) { }
-        }, 2000);
-        return () => clearInterval(interval);
-    }, [isConnected, wasmReady]);
+    const { networkQuality, ping } = useNetworkStats({
+        pc: sfuConnectionRef.current,
+        isConnected,
+        wasmReady,
+    });
 
     const value = useMemo(() => ({
         channelId, participants, isConnected, isMuted, isDeafened, error,
         localUserId: userIdRef.current,
         localStream,
         channelStartedAt,
+        bandwidthStats,
         joinChannel,
         leaveChannel,
         toggleMute, toggleDeafen,
         remoteStreams, remoteVideoStreams,
         addScreenTrack, removeScreenTrack,
-        userVolumes, setUserVolume: (id: string, vol: number) => setUserVolumes(p => new Map(p).set(id, vol)),
+        userVolumes, setUserVolume: (id:
+ string, vol: number) => setUserVolumes(p => new Map(p).set(id, vol)),
         networkQuality, ping, chatMessages, sendChatMessage, setUserInfo,
         smartGateEnabled, setSmartGateEnabled
-    }), [channelId, participants, isConnected, isMuted, isDeafened, error, localUserId, localStream, channelStartedAt, joinChannel, leaveChannel, toggleMute, toggleDeafen, remoteStreams, remoteVideoStreams, addScreenTrack, removeScreenTrack, userVolumes, networkQuality, ping, chatMessages, sendChatMessage, setUserInfo, smartGateEnabled]);
+    }), [channelId, participants, isConnected, isMuted, isDeafened, error, localUserId, localStream, channelStartedAt, bandwidthStats, joinChannel, leaveChannel, toggleMute, toggleDeafen, remoteStreams, remoteVideoStreams, addScreenTrack, removeScreenTrack, userVolumes, networkQuality, ping, chatMessages, sendChatMessage, setUserInfo, smartGateEnabled]);
 
-    return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;
+    return <VoiceContext.Provider value={{...value, vadAuto, setVadAuto, vadThreshold, setVadThreshold, vadMode, setVadMode, pttKey, setPttKey, isPttActive, voiceAvatar, setVoiceAvatar, rawMicVolumeRef}}>{children}</VoiceContext.Provider>;
 };
 
 export const useVoiceStore = () => {

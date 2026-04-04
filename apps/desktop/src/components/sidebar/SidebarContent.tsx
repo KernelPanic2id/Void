@@ -51,7 +51,7 @@ export const SidebarContent = ({
     speakingUsers,
     channelStartedAt
 }: SidebarContentProps) => {
-    const { userVolumes, setUserVolume } = useVoiceStore();
+    const { userVolumes, setUserVolume, voiceAvatar } = useVoiceStore();
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, userId: string, username: string } | null>(null);
 
     const handleContextMenu = (e: React.MouseEvent, userId: string, username: string) => {
@@ -97,10 +97,14 @@ export const SidebarContent = ({
                                         onContextMenu={(e) => handleContextMenu(e, member.userId, member.username)}
                                         className="flex items-center gap-2 py-1 group rounded-[4px] px-2 hover:bg-[#35373c] cursor-pointer"
                                     >
-                                        <div className={`w-6 h-6 rounded-full bg-[#5865f2] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0 relative
+                                        <div className={`w-6 h-6 rounded-full bg-[#5865f2] text-white text-[11px] font-bold flex items-center justify-center flex-shrink-0 relative overflow-hidden
                                             ${speakingUsers?.get(member.userId) ? 'ring-2 ring-[#23a55a]' : ''}
                                         `}>
-                                            {member.username.slice(0, 1).toUpperCase()}
+                                            {(member.userId === localUserId && voiceAvatar) ? (
+                                                <img src={voiceAvatar} alt={member.username} className="w-full h-full object-cover" />
+                                            ) : (
+                                                member.username.slice(0, 1).toUpperCase()
+                                            )}
                                         </div>
                                         <span className="text-[14px] text-[#949ba4] group-hover:text-[#dbdee1] truncate flex-1 font-medium">{member.username}</span>
                                         <div className="flex items-center gap-1 flex-shrink-0">

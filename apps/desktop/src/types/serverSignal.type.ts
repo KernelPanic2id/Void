@@ -10,4 +10,5 @@ export type ServerSignal =
     | { type: 'peer-state'; channelId: string; userId: string; isMuted: boolean; isDeafened: boolean }
     | { type: 'track-map'; userId: string; trackId: string; streamId: string; kind: string }
     | { type: 'chat'; channelId: string; from: string; username: string; message: string; timestamp: number }
+    | { type: 'stats'; userId: string; bandwidthBps: number }
     | { type: 'error'; message: string };

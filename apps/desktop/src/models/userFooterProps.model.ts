@@ -8,4 +8,6 @@ export default interface UserFooterProps extends UserBarProps {
     networkQuality?: 0 | 1 | 2 | 3;
     ping?: number;
     updateCheck?: () => void;
+    onOpenSettings?: () => void;
+    avatarUrl?: string | null;
 }

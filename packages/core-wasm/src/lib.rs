@@ -208,6 +208,8 @@ pub struct SmartGate {
     attack: f32,
     release: f32,
     current_gain: f32,
+    auto_mode: bool,
+    noise_floor: f32,
 }
 
 #[wasm_bindgen]
@@ -219,12 +221,37 @@ impl SmartGate {
             attack,
             release,
             current_gain: 0.0,
+            auto_mode: false,
+            noise_floor: 0.001,
         }
+    }
+
+    pub fn set_threshold(&mut self, threshold: f32) {
+        self.threshold = threshold;
+    }
+
+    pub fn set_auto_mode(&mut self, auto: bool) {
+        self.auto_mode = auto;
     }
 
     pub fn process(&mut self, audio: &mut [f32]) {
         let rms = rms_volume(audio);
-        let target_gain = if rms > self.threshold { 1.0 } else { 0.0 };
+
+        let target_gain = if self.auto_mode {
+            // Adaptive auto VAD: maintain a dynamic noise floor estimation
+            if rms < self.noise_floor {
+                self.noise_floor = rms;
+            } else {
+                // slowly adapt noise floor upward against steady-state noise
+                self.noise_floor += (rms - self.noise_floor) * 0.0001;
+            }
+            // Trigger threshold is dynamic: 4x the noise floor, with a minimum bottom
+            if rms > (self.noise_floor * 4.0).max(0.005) { 1.0 } else { 0.0 }
+        } else {
+            // Manual fixed threshold
+            if rms > self.threshold { 1.0 } else { 0.0 }
+        };
+
         for sample in audio.iter_mut() {
             if target_gain > self.current_gain {
                 self.current_gain = (self.current_gain + self.attack).min(1.0);
@@ -232,6 +259,48 @@ impl SmartGate {
                 self.current_gain = (self.current_gain - self.release).max(0.0);
             }
             *sample *= self.current_gain;
+        }
+    }
+}
+
+// =========================
+// === TRANSIENT SUPPRESSOR ===
+// =========================
+
+#[wasm_bindgen]
+pub struct TransientSuppressor {
+    fast_env: f32,
+    slow_env: f32,
+    threshold: f32,
+}
+
+#[wasm_bindgen]
+impl TransientSuppressor {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> TransientSuppressor {
+        TransientSuppressor {
+            fast_env: 0.0,
+            slow_env: 0.0,
+            threshold: 4.0, // Multiplicateur pour détection de crêtes
+        }
+    }
+
+    pub fn process(&mut self, audio: &mut [f32]) {
+        for sample in audio.iter_mut() {
+            let abs_s = sample.abs();
+
+            // Enveloppe rapide pour capter le clic immédiatement (~1ms @48kHz)
+            self.fast_env = self.fast_env * 0.9 + abs_s * 0.1;
+
+            // Enveloppe lente représentant l'énergie globale continue de la voix (~20ms @48kHz)
+            self.slow_env = self.slow_env * 0.999 + abs_s * 0.001;
+
+            // Si on détecte un pic très intense et soudain (typiquement clavier mécanique)
+            if self.fast_env > self.slow_env * self.threshold {
+                let target_gain = (self.slow_env * self.threshold) / self.fast_env.max(0.0001);
+                // On lisse légèrement la réduction
+                *sample *= target_gain.powf(1.5);
+            }
         }
     }
 }

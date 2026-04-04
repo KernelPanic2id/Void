@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "wasm:build": "cd ../../packages/core-wasm && wasm-pack build --target web --out-dir ../../apps/desktop/src/pkg",
     "build": "tsc && vite build",
     "build:worklet": "tsc src/worker/noise-gate.worklet.ts --outDir public/worker --module ESNext --target ES2020 --esModuleInterop --skipLibCheck",
     "preview": "vite preview",
     "tauri": "tauri"
   },
   "dependencies": {
+    "@jitsi/rnnoise-wasm": "^0.2.1",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-log": "^2.8.0",
     "@tauri-apps/plugin-opener": "^2",

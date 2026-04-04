@@ -45,13 +45,19 @@ const UserFooter = ({
     networkQuality = 3,
     ping = 24,
     updateCheck,
+    onOpenSettings,
+    avatarUrl,
 }: UserFooterProps) => {
     const [menuOpen, setMenuOpen] = useState(false);
     const [showPing, setShowPing] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
         function handleClick(e: MouseEvent) {
+            if (buttonRef.current && buttonRef.current.contains(e.target as Node)) {
+                return; // Géré par le onClick du bouton
+            }
             if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
                 setMenuOpen(false);
             }
@@ -61,6 +67,14 @@ const UserFooter = ({
     }, [menuOpen]);
 
     const fontStyle = { fontFamily: 'gg sans, "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif' };
+
+    const handleSettingsClick = () => {
+        if (onOpenSettings) {
+            onOpenSettings();
+        } else {
+            setMenuOpen((v) => !v);
+        }
+    };
 
     return (
         <div className="w-full select-none bg-[#232428] flex flex-col flex-shrink-0 border-t border-black/10">
@@ -115,12 +129,16 @@ const UserFooter = ({
             <div className="h-[52px] flex items-center px-2">
                 <div className="flex items-center min-w-0 flex-1 px-1 py-1 rounded-[4px] hover:bg-[#35373c] cursor-pointer transition-colors duration-150">
                     <div className="relative flex-shrink-0">
-                        <div
-                            className={`w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-[14px] font-bold text-white transition-all duration-300
-                            ${isSpeaking ? 'ring-2 ring-[#248046]' : ''}`}
-                        >
-                            {username.slice(0, 1).toUpperCase()}
-                        </div>
+                        {avatarUrl ? (
+                            <img src={avatarUrl} alt="Avatar" className={`w-8 h-8 rounded-full object-cover transition-all duration-300 ${isSpeaking ? 'ring-2 ring-[#248046]' : ''}`} />
+                        ) : (
+                            <div
+                                className={`w-8 h-8 rounded-full bg-[#5865f2] flex items-center justify-center text-[14px] font-bold text-white transition-all duration-300
+                                ${isSpeaking ? 'ring-2 ring-[#248046]' : ''}`}
+                            >
+                                {username.slice(0, 1).toUpperCase()}
+                            </div>
+                        )}
                         <div className="absolute -right-0.5 -bottom-0.5 w-3.5 h-3.5 rounded-full bg-[#23a55a] border-[3px] border-[#232428]" />
                     </div>
                     
@@ -151,7 +169,8 @@ const UserFooter = ({
                     </button>
                     <div className="relative">
                         <button
-                            onClick={() => setMenuOpen((v) => !v)}
+                            ref={buttonRef}
+                            onClick={handleSettingsClick}
                             className={`w-8 h-8 flex items-center justify-center rounded-[4px] text-[#dbdee1] hover:bg-[#35373c] hover:text-[#f2f3f5] transition-colors ${menuOpen ? 'bg-[#35373c] text-[#f2f3f5]' : ''}`}
                         >
                             <Settings size={20} />

@@ -10,7 +10,7 @@ export const MembersPanel = ({
     channelId,
     speakingUsers,
 }: MembersPanelProps) => {
-    const { localUserId, userVolumes, setUserVolume } = useVoiceStore();
+    const { localUserId, userVolumes, setUserVolume, voiceAvatar } = useVoiceStore();
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, userId: string, username: string } | null>(null);
 
     const handleContextMenu = (e: React.MouseEvent, userId: string, username: string) => {
@@ -47,10 +47,14 @@ export const MembersPanel = ({
                             onContextMenu={(e) => handleContextMenu(e, member.userId, member.username)}
                             className={`flex items-center gap-2 bg-[#35373c] rounded-lg px-3 py-2 transition-all duration-200 hover:bg-[#404249] animate-[fadeIn_0.2s_ease-out] border border-transparent hover:border-[#5865f2] ${isSpeaking ? 'ring-2 ring-green-500' : ''}`}
                         >
-                            <div className={`w-8 h-8 rounded-full bg-[#5865f2] text-white text-sm font-bold flex items-center justify-center transition-all duration-300 ${
+                            <div className={`w-8 h-8 rounded-full bg-[#5865f2] text-white text-sm font-bold flex items-center justify-center transition-all duration-300 relative overflow-hidden ${
                                 isSpeaking ? 'ring-2 ring-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : ''
                             }`}>
-                                {member.username.slice(0, 1).toUpperCase()}
+                                {(member.userId === localUserId && voiceAvatar) ? (
+                                    <img src={voiceAvatar} alt={member.username} className="w-full h-full object-cover" />
+                                ) : (
+                                    member.username.slice(0, 1).toUpperCase()
+                                )}
                             </div>
                             <span className="text-[13px] text-gray-100 truncate flex-1 font-medium">{member.username}</span>
                             <div className="inline-flex items-center gap-1">
