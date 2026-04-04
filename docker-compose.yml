@@ -60,7 +60,7 @@ services:
       - prometheus
     networks:
       - discordwasm-network
-      -
+
   alertmanager:
     image: prom/alertmanager:v0.26.0
     container_name: alertmanager
