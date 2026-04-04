@@ -39,6 +39,8 @@ use prometheus::{
     register_int_gauge,
 };
 use once_cell::sync::Lazy;
+use rustls::crypto::aws_lc_rs;
+
 
 ///Global Metrics
 static ACTIVE_PEERS: Lazy<IntGauge> = Lazy::new(|| {
@@ -405,7 +407,14 @@ async fn remove_peer(state: &Arc<AppState>, user_id: &str) {
 
 #[tokio::main]
 async fn main() {
+
+    if let Err(e) = aws_lc_rs::default_provider().install_default() {
+        eprintln!("Failed to install aws-lc-rs crypto provider: {:?}", e);
+        std::process::exit(1);
+    }
+
     tracing_subscriber::fmt::init();
+
 
     let mut m = MediaEngine::default();
     m.register_default_codecs()
