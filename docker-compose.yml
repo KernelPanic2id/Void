@@ -37,8 +37,6 @@ services:
       - '--storage.tsdb.retention.time=30d'
       - '--web.enable-lifecycle'
     restart: unless-stopped
-    networks:
-      - discordwasm-network
     depends_on:
       - signaling-server
 
