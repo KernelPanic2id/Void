@@ -10,7 +10,7 @@ alerting:
   alertmanagers:
     - static_configs:
         - targets:
-            - 'alertmanager:9093'
+            - 'localhost:9093'
 
 rule_files:
   - "alert_rules.yml"
@@ -21,7 +21,7 @@ scrape_configs:
     tls_config:
       insecure_skip_verify: true
     static_configs:
-      - targets: ['89.168.59.45:3001']  # ← Nom du conteneur
+      - targets: ['89.168.59.45:3001']
     metrics_path: '/metrics'
     scrape_interval: 5s
 
@@ -31,8 +31,8 @@ scrape_configs:
 
   - job_name: 'alertmanager'
     static_configs:
-      - targets: ['alertmanager:9093']
+      - targets: ['localhost:9093']
 
   - job_name: 'node-exporter'
     static_configs:
-      - targets: ['localhost:9100']  # ← Nom du conteneur
+      - targets: ['localhost:9100']

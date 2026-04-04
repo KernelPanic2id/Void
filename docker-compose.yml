@@ -74,6 +74,12 @@ services:
     restart: unless-stopped
     networks:
       - discordwasm-network
+      -
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    network_mode: "host"
+    restart: unless-stopped
 
 # Déclaration des volumes (Noms identiques aux services)
 volumes:
