@@ -78,3 +78,7 @@ volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
+
+networks:
+  discordwasm-network:
+    driver: bridge
