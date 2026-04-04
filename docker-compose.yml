@@ -55,6 +55,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=Mirage2000
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+      - GF_PROVISIONING_ENABLED=true
     depends_on:
       - prometheus
     network_mode: "host" # Permet d'accéder à localhost:9090 pour Prometheus
