@@ -1,12 +1,5 @@
 import { createContext, ReactNode, useCallback, useContext, useState, useMemo } from 'react';
-
-interface AuthState {
-    username: string | null;
-    userId: string | null;
-    isAuthenticated: boolean;
-    login: (name: string) => void;
-    logout: () => void;
-}
+import { AuthState } from '../models/authState.model';
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
@@ -45,6 +38,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUsername(name);
     }, []);
 
+    const updateUsername = useCallback((newName: string) => {
+        if (!username || newName === username || !newName.trim()) return;
+
+        const currentId = localStorage.getItem(`user_id_${username}`);
+        if (currentId) {
+            localStorage.setItem(`user_id_${newName}`, currentId);
+            localStorage.removeItem(`user_id_${username}`);
+        }
+        localStorage.setItem('emergency_user', newName.trim());
+        setUsername(newName.trim());
+    }, [username]);
+
     /**
      * Logs out the current user and clears persistent session data.
      */
@@ -54,7 +59,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, []);
 
     return (
-        <AuthContext.Provider value={{ username, userId, isAuthenticated: !!username, login, logout }}>
+        <AuthContext.Provider value={{ username, userId, isAuthenticated: !!username, login, logout, updateUsername }}>
             {children}
         </AuthContext.Provider>
     );

@@ -23,4 +23,6 @@ export default interface ExtendedVoiceState extends VoiceState {
     setVoiceAvatar: (url: string | null) => void;
     voiceAvatar: string | null;
     rawMicVolumeRef: React.MutableRefObject<number>;
+    averagePing: number;
+    packetLoss: number;
 }

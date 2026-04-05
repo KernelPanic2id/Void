@@ -10,4 +10,6 @@ export default interface UserFooterProps extends UserBarProps {
     updateCheck?: () => void;
     onOpenSettings?: () => void;
     avatarUrl?: string | null;
+    averagePing?: number;
+    packetLoss?: number;
 }

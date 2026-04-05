@@ -483,7 +483,7 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         };
     }, []);
 
-    const { networkQuality, ping } = useNetworkStats({
+    const { networkQuality, ping, averagePing, packetLoss } = useNetworkStats({
         pc: sfuConnectionRef.current,
         isConnected,
         wasmReady,
@@ -502,9 +502,9 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         addScreenTrack, removeScreenTrack,
         userVolumes, setUserVolume: (id:
  string, vol: number) => setUserVolumes(p => new Map(p).set(id, vol)),
-        networkQuality, ping, chatMessages, sendChatMessage, setUserInfo,
+        networkQuality, ping, averagePing, packetLoss, chatMessages, sendChatMessage, setUserInfo,
         smartGateEnabled, setSmartGateEnabled
-    }), [channelId, participants, isConnected, isMuted, isDeafened, error, localUserId, localStream, channelStartedAt, bandwidthStats, joinChannel, leaveChannel, toggleMute, toggleDeafen, remoteStreams, remoteVideoStreams, addScreenTrack, removeScreenTrack, userVolumes, networkQuality, ping, chatMessages, sendChatMessage, setUserInfo, smartGateEnabled]);
+    }), [channelId, participants, isConnected, isMuted, isDeafened, error, localUserId, localStream, channelStartedAt, bandwidthStats, joinChannel, leaveChannel, toggleMute, toggleDeafen, remoteStreams, remoteVideoStreams, addScreenTrack, removeScreenTrack, userVolumes, networkQuality, ping, averagePing, packetLoss, chatMessages, sendChatMessage, setUserInfo, smartGateEnabled]);
 
     return <VoiceContext.Provider value={{...value, vadAuto, setVadAuto, vadThreshold, setVadThreshold, vadMode, setVadMode, pttKey, setPttKey, isPttActive, voiceAvatar, setVoiceAvatar, rawMicVolumeRef}}>{children}</VoiceContext.Provider>;
 };

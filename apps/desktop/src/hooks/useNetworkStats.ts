@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { calculate_network_quality } from '../pkg/core_wasm';
+import { process_network_stats } from '../pkg/core_wasm';
 
 interface UseNetworkStatsProps {
     pc: RTCPeerConnection | null;
@@ -10,16 +10,22 @@ interface UseNetworkStatsProps {
 export const useNetworkStats = ({ pc, isConnected, wasmReady }: UseNetworkStatsProps) => {
     const [networkQuality, setNetworkQuality] = useState<0 | 1 | 2 | 3>(3);
     const [ping, setPing] = useState<number>(0);
+    const [averagePing, setAveragePing] = useState<number>(0);
+    const [packetLoss, setPacketLoss] = useState<number>(0);
 
     useEffect(() => {
         if (!isConnected || !wasmReady) return;
+
+        let pingSum = 0;
+        let pingCount = 0;
 
         const interval = setInterval(async () => {
             try {
                 if (pc && (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed')) {
                     const stats = await pc.getStats();
                     let totalRTT = 0, count = 0, totalLoss = 0, totalJitter = 0;
-                    let candidatePairRTT: number | undefined;
+                    let candidatePairRTT = 0;
+                    let fallbackRTT = 0;
 
                     stats.forEach(r => {
                         if (r.type === 'candidate-pair' && (r.state === 'succeeded' || r.nominated) && r.currentRoundTripTime !== undefined) {
@@ -29,6 +35,13 @@ export const useNetworkStats = ({ pc, isConnected, wasmReady }: UseNetworkStatsP
                             totalRTT += r.roundTripTime * 1000;
                             count++;
                         }
+                        if (r.type === 'outbound-rtp' && r.packetsSent) {
+                            const remoteStats = Array.from(stats.values()).find(s => s.type === 'remote-inbound-rtp' && s.ssrc === r.ssrc);
+                            if (remoteStats && remoteStats.fractionLost !== undefined) {
+                                totalLoss += remoteStats.fractionLost;
+                                count++;
+                            }
+                        }
                         if (r.type === 'inbound-rtp' && r.kind === 'audio') {
                             const total = (r.packetsLost || 0) + (r.packetsReceived || 0);
                             if (total > 0) {
@@ -36,25 +49,50 @@ export const useNetworkStats = ({ pc, isConnected, wasmReady }: UseNetworkStatsP
                             }
                             if (r.jitter !== undefined) totalJitter += r.jitter * 1000;
                         }
+
+                        // Capture roundTripTime or currentRoundTripTime from other stats as fallback
+                        if (r.type !== 'candidate-pair' && r.type !== 'remote-inbound-rtp') {
+                            if (r.roundTripTime !== undefined) fallbackRTT = r.roundTripTime * 1000;
+                            else if (r.currentRoundTripTime !== undefined) fallbackRTT = r.currentRoundTripTime * 1000;
+                        }
                     });
 
-                    const countDiv = Math.max(1, count);
-                    let finalRTT = 0;
-                    if (count > 0) {
-                        finalRTT = totalRTT / count;
-                    } else if (candidatePairRTT !== undefined) {
-                        finalRTT = candidatePairRTT;
+                    if (typeof process_network_stats === 'function') {
+                        // Use WASM for calculation
+                        const results = process_network_stats(totalRTT, count, candidatePairRTT, fallbackRTT, totalLoss, totalJitter);
+                        // results: [final_ping, packet_loss_pct, final_jitter, quality, final_rtt]
+                        const currentPing = Math.max(1, results[0]);
+                        
+                        setPing(currentPing);
+                        
+                        pingSum += currentPing;
+                        pingCount += 1;
+                        setAveragePing(Math.round(pingSum / pingCount));
+                        
+                        setPacketLoss(results[1]);
+                        setNetworkQuality(results[3] as 0 | 1 | 2 | 3);
                     } else {
-                        stats.forEach(r => {
-                            if (r.roundTripTime !== undefined) finalRTT = r.roundTripTime * 1000;
-                            else if (r.currentRoundTripTime !== undefined) finalRTT = r.currentRoundTripTime * 1000;
-                        });
-                    }
+                        // Fallback purely JS in case wasm is missing
+                        // which normally should not happen as we check typeof.
+                        let finalRTT = 0;
+                        if (count > 0) {
+                            finalRTT = totalRTT / count;
+                        } else if (candidatePairRTT > 0) {
+                            finalRTT = candidatePairRTT;
+                        } else {
+                            finalRTT = fallbackRTT;
+                        }
 
-                    if (finalRTT > 0) {
-                        setPing(Math.max(1, Math.round(finalRTT)));
-                        if (typeof calculate_network_quality === 'function') {
-                            setNetworkQuality(calculate_network_quality(finalRTT, totalLoss / countDiv, totalJitter / countDiv) as 0 | 1 | 2 | 3);
+                        if (finalRTT > 0) {
+                            const currentPing = Math.max(1, Math.round(finalRTT));
+                            setPing(currentPing);
+                            
+                            pingSum += currentPing;
+                            pingCount += 1;
+                            setAveragePing(Math.round(pingSum / pingCount));
+                            
+                            setPacketLoss(count > 0 ? (totalLoss / count) * 100 : 0);
+                            // quality is omitted in fallback JS for simplicity
                         }
                     }
                 }
@@ -66,6 +104,5 @@ export const useNetworkStats = ({ pc, isConnected, wasmReady }: UseNetworkStatsP
         return () => clearInterval(interval);
     }, [isConnected, wasmReady, pc]);
 
-    return { networkQuality, ping };
+    return { networkQuality, ping, averagePing, packetLoss };
 };
-

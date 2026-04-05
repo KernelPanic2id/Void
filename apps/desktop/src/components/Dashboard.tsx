@@ -14,6 +14,7 @@ import { SidebarView } from '../models/sidebarContentProps.model';
 import { ChatPanel } from './chat/ChatPanel';
 import { UserContextMenu } from './ui/UserContextMenu';
 import { SettingsModal } from './ui/SettingsModal';
+import { Download, X } from 'lucide-react';
 
 /**
  * Main application dashboard integrating voice, text chat, and stream viewing.
@@ -68,6 +69,13 @@ const Dashboard = () => {
     const speakingUsers = useVoiceActivity(memoizedRemoteStreams, localUserId, localStream, isMuted);
     
     const { updateAvailable, updateStatus, triggerUpdate, checkForUpdate } = useTauriUpdater();
+    const [showUpdateToast, setShowUpdateToast] = useState(false);
+
+    useEffect(() => {
+        if (updateAvailable) {
+            setShowUpdateToast(true);
+        }
+    }, [updateAvailable]);
 
     useEffect(() => {
         if (isStreaming && stream && isConnected) {
@@ -436,24 +444,56 @@ const Dashboard = () => {
                     />
                 )}
 
-                {updateAvailable && (
-                    <div className="fixed bottom-4 right-4 bg-blue-700 text-white px-4 py-2 rounded shadow-lg z-50">
-                        <span>Une mise à jour est disponible ! </span>
-                        <button className="ml-2 bg-white text-blue-700 px-2 py-1 rounded" onClick={triggerUpdate}>
-                            Mettre à jour
-                        </button>
-                        <button className="ml-2 bg-white text-blue-700 px-2 py-1 rounded" onClick={checkForUpdate}>
-                            Vérifier à nouveau
-                        </button>
-                    </div>
-                )}
-                {updateStatus && (
-                    <div className="fixed bottom-16 right-4 bg-gray-800 text-white px-4 py-2 rounded shadow-lg z-50">
-                        {updateStatus}
+                {/* Petit Toast de mise à jour (Discord-like) */}
+                {showUpdateToast && (
+                    <div className="fixed bottom-6 right-6 bg-[#2b2d31] rounded-lg shadow-2xl border border-black/20 w-80 animate-in slide-in-from-bottom-8 fade-in z-[90]">
+                        <div className="p-4">
+                            <div className="flex items-start justify-between">
+                                <div className="flex gap-3">
+                                    <div className="mt-0.5 bg-[#23a55a]/20 p-2 rounded-full text-[#23a55a]">
+                                        <Download size={20} />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-[#f2f3f5] font-bold text-[15px]">Mise à jour disponible</h4>
+                                        <p className="text-[#b5bac1] text-[13px] mt-1 leading-tight">
+                                            Une nouvelle version de l'application est prête à être installée.
+                                        </p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => setShowUpdateToast(false)}
+                                    className="text-[#b5bac1] hover:text-[#dbdee1] transition-colors"
+                                    aria-label="Fermer"
+                                >
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            <div className="mt-4 flex justify-end gap-2">
+                                <button 
+                                    onClick={() => setIsSettingsOpen(true)}
+                                    className="text-[#f2f3f5] hover:underline text-[13px] font-medium px-3 py-1.5"
+                                >
+                                    Voir les détails
+                                </button>
+                                <button 
+                                    onClick={triggerUpdate}
+                                    className="bg-[#23a55a] hover:bg-[#1a7f44] text-white text-[13px] font-medium px-4 py-1.5 rounded transition-colors"
+                                >
+                                    Mettre à jour
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
 
-                <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+                <SettingsModal 
+                    isOpen={isSettingsOpen} 
+                    onClose={() => setIsSettingsOpen(false)} 
+                    updateAvailable={updateAvailable}
+                    updateStatus={updateStatus}
+                    triggerUpdate={triggerUpdate}
+                    checkForUpdate={checkForUpdate}
+                />
             </MainLayout>
         </div>
     );

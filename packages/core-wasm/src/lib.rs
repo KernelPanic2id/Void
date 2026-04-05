@@ -65,13 +65,11 @@ pub fn compress_audio(audio: &[f32], threshold: f32, ratio: f32) -> Vec<f32> {
     out
 }
 
-// Détection de clipping (saturation)
 #[wasm_bindgen]
 pub fn detect_clipping(audio: &[f32], clip_level: f32) -> bool {
     audio.iter().any(|&sample| sample.abs() >= clip_level)
 }
 
-// Mesure du crest factor (rapport pic/RMS)
 #[wasm_bindgen]
 pub fn crest_factor(audio: &[f32]) -> f32 {
     let peak = audio.iter().map(|x| x.abs()).fold(0.0, f32::max);
@@ -79,7 +77,6 @@ pub fn crest_factor(audio: &[f32]) -> f32 {
     if rms == 0.0 { 0.0 } else { peak / rms }
 }
 
-// Normalisation d'un buffer audio (ramène le max à 1.0)
 #[wasm_bindgen]
 pub fn normalize_audio(audio: &[f32]) -> Vec<f32> {
     let max_val = audio.iter().map(|x| x.abs()).fold(0.0, f32::max);
@@ -87,13 +84,11 @@ pub fn normalize_audio(audio: &[f32]) -> Vec<f32> {
     audio.iter().map(|&x| x / max_val).collect()
 }
 
-// Génération de bruit blanc (LCG, compatible WASM)
 #[wasm_bindgen]
 pub fn white_noise(len: usize, amplitude: f32, seed: u32) -> Vec<f32> {
     let mut out = Vec::with_capacity(len);
     let mut state = seed;
     for _ in 0..len {
-        // LCG params : https://en.wikipedia.org/wiki/Linear_congruential_generator
         state = state.wrapping_mul(1664525).wrapping_add(1013904223);
         let val = ((state >> 8) & 0xFFFFFF) as f32 / 16777215.0 * 2.0 - 1.0;
         out.push(val * amplitude);
@@ -115,19 +110,16 @@ pub fn analyze_frame(data: &[u8], width: u32, height: u32) -> String {
     format!("Frame {}x{} - Luminosité moyenne (R): {}", width, height, avg)
 }
 
-// Détection de frame noire
 #[wasm_bindgen]
 pub fn is_black_frame(data: &[u8], threshold: u8) -> bool {
     data.chunks(4).all(|px| px[0] < threshold && px[1] < threshold && px[2] < threshold)
 }
 
-// Détection de frame blanche
 #[wasm_bindgen]
 pub fn is_white_frame(data: &[u8], threshold: u8) -> bool {
     data.chunks(4).all(|px| px[0] > threshold && px[1] > threshold && px[2] > threshold)
 }
 
-// Calcul de l'histogramme des couleurs (R, G, B)
 #[wasm_bindgen]
 pub fn color_histogram(data: &[u8]) -> Vec<u32> {
     let mut hist_r = [0u32; 256];
@@ -141,7 +133,6 @@ pub fn color_histogram(data: &[u8]) -> Vec<u32> {
     [hist_r.as_slice(), hist_g.as_slice(), hist_b.as_slice()].concat()
 }
 
-// Détection de freeze vidéo (frame identique sur plusieurs cycles)
 #[wasm_bindgen]
 pub fn is_frozen_frame(data1: &[u8], data2: &[u8], tolerance: u8) -> bool {
     if data1.len() != data2.len() { return false; }
@@ -152,10 +143,10 @@ pub fn is_frozen_frame(data1: &[u8], data2: &[u8], tolerance: u8) -> bool {
 // === RÉSEAU & SÉCURITÉ ===
 // =========================
 
-// Calcule un score de qualité réseau (0-3) basé sur WebRTC stats
+// Calcule un score de qualité réseau (0-3) bas sur WebRTC stats
 #[wasm_bindgen]
 pub fn calculate_network_quality(latency_ms: f32, packet_loss: f32, jitter_ms: f32) -> u8 {
-    // 3: Excellent, 2: Moyen, 1: Mauvais, 0: Critique/Déconnecté
+    // 3: Excellent, 2: Moyen, 1: Mauvais, 0: Critique/Dconnect
     if latency_ms > 400.0 || packet_loss > 0.15 || jitter_ms > 100.0 {
         return 1;
     }
@@ -165,7 +156,44 @@ pub fn calculate_network_quality(latency_ms: f32, packet_loss: f32, jitter_ms: f
     3
 }
 
-// Conversion ms <-> samples
+#[wasm_bindgen]
+pub fn process_network_stats(
+    total_rtt: f32,
+    count: f32,
+    candidate_pair_rtt: f32,
+    fallback_rtt: f32,
+    total_loss: f32,
+    total_jitter: f32,
+) -> Vec<f32> {
+    let mut final_rtt = 0.0;
+
+    if count > 0.0 {
+        final_rtt = total_rtt / count;
+    } else if candidate_pair_rtt > 0.0 {
+        final_rtt = candidate_pair_rtt;
+    } else if fallback_rtt > 0.0 {
+        final_rtt = fallback_rtt;
+    }
+
+    let final_loss = if count > 0.0 {
+        total_loss / count
+    } else {
+        0.0
+    };
+
+    let final_jitter = if count > 0.0 {
+        total_jitter / count
+    } else {
+        0.0
+    };
+
+    let final_ping = final_rtt.max(1.0).round();
+    let packet_loss_pct = final_loss * 100.0;
+    let quality = calculate_network_quality(final_rtt, final_loss, final_jitter) as f32;
+
+    vec![final_ping, packet_loss_pct, final_jitter, quality, final_rtt]
+}
+
 #[wasm_bindgen]
 pub fn ms_to_samples(ms: f32, sample_rate: f32) -> usize {
     ((ms / 1000.0) * sample_rate) as usize
@@ -176,7 +204,6 @@ pub fn samples_to_ms(samples: usize, sample_rate: f32) -> f32 {
     (samples as f32 / sample_rate) * 1000.0
 }
 
-// Hachage rapide CRC32 d'un buffer
 #[wasm_bindgen]
 pub fn crc32_hash(data: &[u8]) -> u32 {
     use crc32fast::Hasher;
@@ -184,10 +211,6 @@ pub fn crc32_hash(data: &[u8]) -> u32 {
     hasher.update(data);
     hasher.finalize()
 }
-
-// =========================
-// === AUTRES / UTILS    ===
-// =========================
 
 #[wasm_bindgen]
 pub fn check_quality(bitrate: u32) -> String {

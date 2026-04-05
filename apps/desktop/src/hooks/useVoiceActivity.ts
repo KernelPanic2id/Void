@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { rms_volume } from '../pkg/core_wasm';
 
-const VAD_THRESHOLD = 30;
+const VAD_THRESHOLD = 0.01; // Ajusté pour le FloatTimeDomainData (RMS entre 0.0 et 1.0)
 const POLL_INTERVAL_MS = 100;
 
 export const useVoiceActivity = (
@@ -71,7 +72,7 @@ export const useVoiceActivity = (
         if (intervalRef.current) clearInterval(intervalRef.current);
 
         if (currentAnalyzers.size > 0) {
-            const dataArray = new Uint8Array(128);
+            const dataArray = new Float32Array(256);
             intervalRef.current = setInterval(() => {
                 setSpeakingMap(prev => {
                     const next = new Map<string, boolean>();
@@ -81,10 +82,12 @@ export const useVoiceActivity = (
                         let isSpeaking = false;
                         if (!(isLocalMuted && id === localUserId)) {
                             try {
-                                entry.analyser.getByteFrequencyData(dataArray);
-                                let sum = 0;
-                                for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-                                isSpeaking = (sum / dataArray.length) > VAD_THRESHOLD;
+                                entry.analyser.getFloatTimeDomainData(dataArray);
+                                
+                                // Utilisation de la fonction WASM pour l'analyse RMS (performances accrues)
+                                const volume = rms_volume(dataArray);
+                                
+                                isSpeaking = volume > VAD_THRESHOLD;
                             } catch (e) {}
                         }
                         next.set(id, isSpeaking);
