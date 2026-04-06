@@ -14,7 +14,9 @@
       {
         "title": "Vocal WASM",
         "width": 1280,
-        "height": 720
+        "height": 720,
+        "decorations": false,
+        "transparent": false
       }
     ],
     "security": {

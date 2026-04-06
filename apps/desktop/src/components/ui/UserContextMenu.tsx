@@ -18,7 +18,7 @@ export const UserContextMenu = ({ x, y, username, volume, onVolumeChange, onClos
         <div
             ref={menuRef}
             style={{ top: y, left: x }}
-            className="fixed z-50 w-56 bg-[#050511]/95 backdrop-blur-md rounded-xl shadow-[0_0_30px_rgba(34,211,238,0.15)] border border-cyan-500/30 p-2 text-cyan-100 font-sans animate-in fade-in zoom-in duration-200"
+            className="fixed z-50 w-56 glass-modal rounded-xl p-2 text-cyan-100 font-sans animate-in fade-in zoom-in duration-200"
         >
             <div className="px-2 py-1.5 text-[12px] font-black uppercase tracking-widest text-cyan-500/70 border-b border-cyan-500/20 mb-2 truncate">
                 {username}

@@ -113,9 +113,9 @@ export const ChannelList = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-transparent flex-shrink-0 w-60 border-r border-cyan-500/20 shadow-[4px_0_24px_rgba(0,0,0,0.4)] z-20">
+    <div className="flex flex-col h-full bg-transparent">
       {/* Server Header */}
-      <div className="h-[48px] px-4 flex items-center justify-between border-b border-cyan-500/10 shadow-[0_4px_15px_rgba(0,0,0,0.3)] bg-[#050511]/90 backdrop-blur-md flex-shrink-0 cursor-pointer hover:bg-cyan-500/5 transition-colors group">
+      <div className="h-12 px-4 flex items-center justify-between border-b border-cyan-500/10 shadow-[0_4px_15px_rgba(0,0,0,0.3)] shrink-0 cursor-pointer hover:bg-cyan-500/5 transition-colors group">
         <span className="font-black text-[15px] uppercase tracking-wider text-cyan-50 truncate filter drop-shadow-[0_0_8px_rgba(34,211,238,0.4)] group-hover:text-cyan-200">{server.name}</span>
         {isOwner && (
           <button className="p-1.5 hover:bg-cyan-500/20 rounded-md text-cyan-500/70 hover:text-cyan-300 transition-colors border border-transparent hover:border-cyan-500/40 hover:shadow-[0_0_15px_rgba(34,211,238,0.2)]">
@@ -125,7 +125,7 @@ export const ChannelList = ({
       </div>
 
       {/* Channel List */}
-      <div className="flex-1 overflow-y-auto py-3 custom-scrollbar bg-[#050511]/80 backdrop-blur-sm">
+      <div className="flex-1 overflow-y-auto py-3 custom-scrollbar">
         {textChannels.length > 0 && renderCategory('Salons textuels', textChannels)}
         {voiceChannels.length > 0 && renderCategory('Salons vocaux', voiceChannels)}
         

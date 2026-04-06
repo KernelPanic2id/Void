@@ -36,11 +36,11 @@ export const ActivitySettings = () => {
                     <h3 className="text-cyan-100 text-[16px] font-bold uppercase tracking-widest">Activité Actuelle</h3>
                 </div>
                 
-                <div className="bg-[#050511] rounded-xl p-5 flex items-center justify-between border border-cyan-500/30 shadow-[0_0_20px_rgba(34,211,238,0.1)] relative overflow-hidden group">
+                <div className="glass border border-cyan-500/30 rounded-xl p-5 flex items-center justify-between shadow-[0_0_20px_rgba(34,211,238,0.1)] relative overflow-hidden group">
                     <div className="absolute inset-0 bg-gradient-to-r from-cyan-900/10 to-transparent pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity" />
                     {currentGame ? (
                         <div className="flex items-center gap-4 relative z-10">
-                            <div className="w-12 h-12 bg-[#0a0b14] border border-cyan-500/40 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.2)]">
+                            <div className="w-12 h-12 glass-heavy border border-cyan-500/40 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(34,211,238,0.2)]">
                                 <Monitor size={24} className="text-cyan-400" />
                             </div>
                             <div className="flex flex-col">
@@ -78,7 +78,7 @@ export const ActivitySettings = () => {
 
                 <div className="flex flex-col gap-3">
                     {addedGames.map(game => (
-                        <div key={game.id} className="bg-[#050511] rounded-xl p-4 flex items-center justify-between group hover:bg-[#0a0b14] transition-all border border-cyan-500/10 hover:border-cyan-500/30 shadow-[0_0_10px_rgba(0,0,0,0.5)] hover:shadow-[0_0_20px_rgba(34,211,238,0.1)] relative overflow-hidden">
+                        <div key={game.id} className="glass rounded-xl p-4 flex items-center justify-between group hover:bg-white/[0.04] transition-all border border-cyan-500/10 hover:border-cyan-500/30 shadow-[0_0_10px_rgba(0,0,0,0.5)] hover:shadow-[0_0_20px_rgba(34,211,238,0.1)] relative overflow-hidden">
                             <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-500/30 group-hover:bg-cyan-400 transition-colors shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
                             <div className="flex items-center gap-4 pl-3 relative z-10 w-full">
                                 <div className="flex flex-col flex-1">

@@ -27,19 +27,24 @@ export const SettingsModal = ({ isOpen, onClose, updateAvailable, updateStatus, 
     if (!isOpen || !mounted) return null;
 
     const modalContent = (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#000000]/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="flex w-[800px] h-[600px] bg-[#050511] rounded-xl overflow-hidden shadow-2xl relative">
-                
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-[#000000]/60 backdrop-blur-xl animate-in fade-in duration-200">
+            <div className="flex w-[800px] h-[600px] glass-modal rounded-2xl overflow-hidden shadow-2xl relative">
+                {/* Top edge highlight */}
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent z-20 pointer-events-none" />
+                {/* Left edge highlight */}
+                <div className="absolute top-0 left-0 bottom-0 w-px bg-gradient-to-b from-white/10 via-transparent to-transparent z-20 pointer-events-none" />
+
                 {/* Sidebar */}
-                <div className="w-[240px] bg-[#020205] flex flex-col py-6 px-4 shrink-0 relative z-10">
+                <div className="w-[240px] glass-heavy flex flex-col py-6 px-4 shrink-0 relative z-10 border-r border-white/[0.06]">
+                    <div className="absolute top-0 bottom-0 right-0 w-px bg-gradient-to-b from-transparent via-cyan-500/10 to-transparent pointer-events-none" />
                     <nav className="w-full flex flex-col gap-1">
                         <div className="px-2 pb-2 text-[10px] font-black text-cyan-500 uppercase tracking-widest">Paramètres Utilisateur</div>
                         
                         <button 
                             className={`flex items-center gap-3 px-3 py-2 rounded font-bold text-[13px] transition-all duration-200 ${
                                 activeTab === 'profile' 
-                                ? 'text-white bg-[#0f111a]' 
-                                : 'text-gray-400 hover:bg-[#0f111a]/50 hover:text-gray-200'
+                                ? 'text-white bg-white/[0.08]' 
+                                : 'text-gray-400 hover:bg-white/[0.04] hover:text-gray-200'
                             }`}
                             onClick={() => setActiveTab('profile')}
                         >
@@ -49,8 +54,8 @@ export const SettingsModal = ({ isOpen, onClose, updateAvailable, updateStatus, 
                         <button 
                             className={`flex items-center gap-3 px-3 py-2 rounded font-bold text-[13px] transition-all duration-200 ${
                                 activeTab === 'voice' 
-                                ? 'text-white bg-[#0f111a]' 
-                                : 'text-gray-400 hover:bg-[#0f111a]/50 hover:text-gray-200'
+                                ? 'text-white bg-white/[0.08]' 
+                                : 'text-gray-400 hover:bg-white/[0.04] hover:text-gray-200'
                             }`}
                             onClick={() => setActiveTab('voice')}
                         >
@@ -66,8 +71,8 @@ export const SettingsModal = ({ isOpen, onClose, updateAvailable, updateStatus, 
                         <button 
                             className={`flex items-center gap-3 px-3 py-2 rounded font-bold text-[13px] transition-all duration-200 ${
                                 activeTab === 'activity' 
-                                ? 'text-white bg-[#0f111a]' 
-                                : 'text-gray-400 hover:bg-[#0f111a]/50 hover:text-gray-200'
+                                ? 'text-white bg-white/[0.08]' 
+                                : 'text-gray-400 hover:bg-white/[0.04] hover:text-gray-200'
                             }`}
                             onClick={() => setActiveTab('activity')}
                         >
@@ -82,8 +87,8 @@ export const SettingsModal = ({ isOpen, onClose, updateAvailable, updateStatus, 
                         <button 
                             className={`flex items-center justify-between px-3 py-2 rounded font-bold text-[13px] transition-all duration-200 ${
                                 activeTab === 'update' 
-                                ? 'text-white bg-[#0f111a]' 
-                                : 'text-gray-400 hover:bg-[#0f111a]/50 hover:text-gray-200'
+                                ? 'text-white bg-white/[0.08]' 
+                                : 'text-gray-400 hover:bg-white/[0.04] hover:text-gray-200'
                             }`}
                             onClick={() => setActiveTab('update')}
                         >
@@ -94,7 +99,8 @@ export const SettingsModal = ({ isOpen, onClose, updateAvailable, updateStatus, 
                 </div>
                 
                 {/* Main Content Area */}
-                <div className="flex-1 flex flex-col relative bg-[#0a0b14] z-10 w-full">
+                <div className="flex-1 flex flex-col relative glass-light z-10 w-full">
+                    <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/[0.06] to-transparent pointer-events-none" />
                     <div className="absolute top-6 right-6 z-50">
                         <button 
                             className="w-8 h-8 rounded-full border border-[#1a3a4c] text-gray-400 flex items-center justify-center hover:text-white hover:border-cyan-400 transition-colors"

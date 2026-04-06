@@ -8,6 +8,8 @@ import { VoiceAudioRenderer } from './stream/VoiceAudioRenderer';
 import { SidebarContent } from './sidebar/SidebarContent';
 import UserFooter from './sidebar/UserFooter';
 import { useVoiceActivity } from '../hooks/useVoiceActivity';
+import { useResizable } from '../hooks/useResizable';
+import { useDraggable } from '../hooks/useDraggable';
 import { Headphones, Video } from 'lucide-react';
 import { useTauriUpdater } from '../lib/useTauriUpdater';
 import { SidebarView } from '../models/sidebarContentProps.model';
@@ -55,6 +57,8 @@ const Dashboard = () => {
     } = useVoiceStore();
 
     const { servers, activeServerId, createChannel, deleteChannel } = useServer();
+    const { width: sidebarWidth, height: sidebarHeight, handleResizeRight, handleResizeBottom, handleResizeCorner } = useResizable();
+    const { position: sidebarPosition, handleDragStart: onSidebarDrag } = useDraggable();
 
     const [activeView, setActiveView] = useState<SidebarView>('voice');
     const [contextMenu, setContextMenu] = useState<{ x: number, y: number, userId: string, username: string } | null>(null);
@@ -185,9 +189,17 @@ const Dashboard = () => {
     const activeServer = servers.find(s => s.id === activeServerId);
 
     return (
-        <div className="flex h-screen bg-[#0a0014] text-gray-100 overflow-hidden font-sans">
+        <div className="flex flex-1 min-h-0 text-gray-100 overflow-hidden font-sans">
             <MainLayout
                 channelName={channelName}
+                isInVoice={(!!channelId && isConnected) || activeView === 'chat'}
+                sidebarWidth={sidebarWidth}
+                sidebarHeight={sidebarHeight}
+                onResizeRight={handleResizeRight}
+                onResizeBottom={handleResizeBottom}
+                onResizeCorner={handleResizeCorner}
+                sidebarPosition={sidebarPosition}
+                onSidebarDrag={onSidebarDrag}
                 sidebar={
                     (activeServerId && activeServerId !== 'sos' && activeServer) ? (
                         <ChannelList
@@ -255,8 +267,8 @@ const Dashboard = () => {
                 ) : (
                     <div className={`flex flex-col h-full gap-3 ${focusedUserId ? 'overflow-hidden' : 'overflow-y-auto'}`}>
                         {focusedUserId && (
-                            <div className="flex-1 min-h-0 w-full bg-[#050511]/80 border border-cyan-500/20 backdrop-blur-md rounded-xl overflow-hidden flex items-center justify-center relative shadow-[0_0_30px_rgba(34,211,238,0.1)] mt-4">
-                                <button 
+                            <div className="flex-1 min-h-0 w-full glass-card border border-cyan-500/20 rounded-xl overflow-hidden flex items-center justify-center relative shadow-[0_0_30px_rgba(34,211,238,0.1)] mt-4">
+                                <button
                                     className="absolute top-4 right-4 z-50 bg-[#0a0b14]/80 border border-cyan-500/30 hover:bg-cyan-500/20 hover:border-cyan-400 text-cyan-100 rounded-lg px-4 py-1.5 backdrop-blur-sm transition-all duration-300 shadow-[0_0_15px_rgba(34,211,238,0.2)]"
                                     onClick={() => setFocusedUserId(null)}
                                 >
@@ -279,7 +291,7 @@ const Dashboard = () => {
                                             );
                                         } else {
                                             return (
-                                                <div key={`focus-${card.id}`} className={`relative w-[92%] max-w-[92%] h-[92%] max-h-[92%] mx-auto my-auto rounded-lg overflow-hidden flex flex-col items-center justify-center text-white bg-[#1e1f22] ${isSpeaking ? 'ring-4 ring-green-500 ring-offset-4 ring-offset-black shadow-[0_0_20px_rgba(34,197,94,0.4)]' : ''}`}>
+                                                <div key={`focus-${card.id}`} className={`relative w-[92%] max-w-[92%] h-[92%] max-h-[92%] mx-auto my-auto rounded-xl overflow-hidden flex flex-col items-center justify-center text-white glass-card ${isSpeaking ? 'ring-2 ring-cyan-400/60 shadow-[0_0_30px_rgba(34,211,238,0.2)]' : ''}`}>
                                                     {voiceAvatar ? (
                                                         <>
                                                             <img src={voiceAvatar} alt={safeUsername} className="w-full h-full object-cover" />
@@ -338,8 +350,8 @@ const Dashboard = () => {
                                 const isSpeaking = speakingUsers.get(card.id) ?? false;
                                 
                                         const cardClassName = focusedUserId
-                                    ? `relative shrink-0 w-60 h-full rounded-xl overflow-hidden bg-[#0d0f1a]/80 border border-cyan-500/20 backdrop-blur-md transition-all duration-500 hover:scale-[1.02] cursor-pointer snap-center shadow-[0_4px_20px_rgba(0,0,0,0.3)] ${focusedUserId === card.id ? 'ring-2 ring-cyan-400/80 shadow-[0_0_20px_rgba(34,211,238,0.3)]' : ''}`
-                                    : `relative flex flex-col items-center justify-center aspect-video w-[92%] max-w-[92%] mx-auto rounded-xl overflow-hidden bg-[#0d0f1a]/80 border border-cyan-500/20 backdrop-blur-md transition-all duration-500 hover:scale-[1.02] cursor-pointer shadow-[0_4px_20px_rgba(0,0,0,0.3)] hover:border-cyan-400/50 hover:shadow-[0_0_25px_rgba(34,211,238,0.2)] ${isSpeaking ? 'ring-2 ring-cyan-400 ring-offset-2 ring-offset-[#050511] shadow-[0_0_30px_rgba(34,211,238,0.5)]' : ''}`;
+                                    ? `relative shrink-0 w-60 h-full rounded-xl overflow-hidden glass-card border border-cyan-500/20 transition-all duration-500 hover:scale-[1.02] cursor-pointer snap-center shadow-[0_4px_20px_rgba(0,0,0,0.3)] ${focusedUserId === card.id ? 'ring-2 ring-cyan-400/80 shadow-[0_0_20px_rgba(34,211,238,0.3)]' : ''}`
+                                    : `relative flex flex-col items-center justify-center aspect-video w-[92%] max-w-[92%] mx-auto rounded-xl overflow-hidden glass-card border border-cyan-500/20 transition-all duration-500 hover:scale-[1.02] cursor-pointer shadow-[0_4px_20px_rgba(0,0,0,0.3)] hover:border-cyan-400/50 hover:shadow-[0_0_25px_rgba(34,211,238,0.2)] ${isSpeaking ? 'ring-2 ring-cyan-400 ring-offset-2 ring-offset-transparent shadow-[0_0_30px_rgba(34,211,238,0.5)]' : ''}`;
 
                                 const handleCardClick = () => setFocusedUserId(card.id);
 
@@ -349,9 +361,9 @@ const Dashboard = () => {
                                             <div key={card.id} className={cardClassName} onClick={handleCardClick}>
                                                 {focusedUserId === card.id ? (
                                                     <>
-                                                        <div className="absolute inset-0 flex items-center justify-center bg-[#1e1f22]">
-                                                                <div className={`relative flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-cyan-600/40 to-purple-600/40 text-cyan-50 font-black text-xl transition-all duration-500 shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-cyan-500/30 ${
-                                                                isSpeaking ? 'ring-2 ring-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.6)] scale-110' : ''
+                                                        <div className="absolute inset-0 flex items-center justify-center bg-[#050511]">
+                                                                <div className={`relative flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-cyan-600/40 to-purple-600/40 text-cyan-50 font-black text-xl transition-all duration-500 shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-white/[0.08] ${
+                                                                isSpeaking ? 'ring-2 ring-cyan-400/60 shadow-[0_0_30px_rgba(34,211,238,0.4)] scale-110' : ''
                                                             }`}>
                                                                 {safeUsername.slice(0, 1).toUpperCase()}
                                                                 <div className="absolute -bottom-1 -right-1 bg-[#050511] rounded-full p-1 border border-cyan-500/50">
@@ -372,7 +384,7 @@ const Dashboard = () => {
                                                     />
                                                 )}
                                                 {isDeafened && (
-                                                    <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-red-500 border-2 border-[#232428] inline-flex items-center justify-center shadow-md z-10">
+                                                    <div className="absolute top-3 right-3 w-7 h-7 rounded-full bg-rose-500/80 border-2 border-[#050511] inline-flex items-center justify-center shadow-md z-10">
                                                         <Headphones size={13} className="text-white" />
                                                     </div>
                                                 )}
@@ -385,7 +397,7 @@ const Dashboard = () => {
                                                     <>
                                                         <img src={voiceAvatar} alt={safeUsername} className="w-full h-full object-cover" />
                                                         <div className="absolute bottom-2 left-2 bg-black/60 backdrop-blur-sm px-2 py-1 rounded flex items-center gap-2 z-20">
-                                                            <div className={`w-2 h-2 rounded-full transition-colors duration-300 ${isSpeaking ? 'bg-green-500 animate-pulse' : 'bg-green-500'}`} />
+                                                            <div className={`w-2 h-2 rounded-full transition-colors duration-300 ${isSpeaking ? 'bg-cyan-400 animate-pulse' : 'bg-cyan-500/50'}`} />
                                                             <span className="text-xs font-bold text-white">{safeUsername}</span>
                                                         </div>
                                                     </>
@@ -411,9 +423,9 @@ const Dashboard = () => {
                                         <div key={card.id} className={cardClassName} onClick={handleCardClick} onContextMenu={(e) => handleContextMenu(e, card.id, card.username)}>
                                             {focusedUserId === card.id ? (
                                                 <>
-                                                    <div className="absolute inset-0 flex items-center justify-center bg-[#1e1f22]">
-                                                                <div className={`relative flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-cyan-600/40 to-purple-600/40 text-cyan-50 font-black text-xl transition-all duration-500 shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-cyan-500/30 ${
-                                                            isSpeaking ? 'ring-2 ring-cyan-400 shadow-[0_0_30px_rgba(34,211,238,0.6)] scale-110' : ''
+                                                    <div className="absolute inset-0 flex items-center justify-center bg-[#050511]">
+                                                                <div className={`relative flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-cyan-600/40 to-purple-600/40 text-cyan-50 font-black text-xl transition-all duration-500 shadow-[0_0_20px_rgba(0,0,0,0.5)] border border-white/[0.08] ${
+                                                            isSpeaking ? 'ring-2 ring-cyan-400/60 shadow-[0_0_30px_rgba(34,211,238,0.4)] scale-110' : ''
                                                         }`}>
                                                             {card.username.slice(0, 1).toUpperCase()}
                                                             <div className="absolute -bottom-1 -right-1 bg-[#050511] rounded-full p-1 border border-cyan-500/50">
@@ -441,7 +453,7 @@ const Dashboard = () => {
                                         key={card.id} 
                                         onClick={handleCardClick}
                                         onContextMenu={(e) => handleContextMenu(e, card.id, card.username)}
-                                        className={`${cardClassName} !bg-[#050511]`}
+                                        className={`${cardClassName}`}
                                     >
                                         <div className="absolute inset-0 bg-gradient-to-tr from-cyan-900/10 via-transparent to-purple-900/10 pointer-events-none" />
                                         <div className="absolute inset-0 flex items-center justify-center">
@@ -484,7 +496,7 @@ const Dashboard = () => {
 
                 {/* Petit Toast de mise à jour (Discord-like) */}
                 {showUpdateToast && (
-                    <div className="fixed bottom-6 right-6 bg-[#2b2d31] rounded-lg shadow-2xl border border-black/20 w-80 animate-in slide-in-from-bottom-8 fade-in z-[90]">
+                    <div className="fixed bottom-6 right-6 glass-heavy rounded-lg shadow-2xl border border-cyan-500/20 w-80 animate-in slide-in-from-bottom-8 fade-in z-[90]">
                         <div className="p-4">
                             <div className="flex items-start justify-between">
                                 <div className="flex gap-3">

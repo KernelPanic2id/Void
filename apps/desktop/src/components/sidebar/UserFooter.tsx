@@ -90,13 +90,13 @@ const UserFooter = ({
     };
 
     return (
-        <div className="w-full select-none bg-[#0a0b14]/90 backdrop-blur-3xl flex flex-col flex-shrink-0 border-t border-cyan-500/20 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-20">
+        <div className="w-full select-none glass-heavy flex flex-col flex-shrink-0 border-t border-cyan-500/20 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-20">
             {channelId && (
                 <div className="h-[48px] px-3 flex items-center border-b border-cyan-500/10 relative">
                     {showVoiceDetails && isConnected && (
                         <div
                             ref={voiceDetailsRef}
-                            className="absolute bottom-full left-0 mb-3 ml-2 w-[340px] bg-[#050511] rounded-xl shadow-[0_10px_40px_rgba(34,211,238,0.2)] border border-cyan-500/30 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-300"
+                            className="absolute bottom-full left-0 mb-3 ml-2 w-[340px] glass-heavy rounded-xl shadow-[0_10px_40px_rgba(34,211,238,0.2)] border border-cyan-500/30 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-300"
                         >
                             <div className="p-4 pt-5 pb-3">
                                 <h3 className="text-cyan-50 font-bold uppercase tracking-widest text-[16px] mb-4">Voice System Matrix</h3>
@@ -143,7 +143,7 @@ const UserFooter = ({
                                     </div>
                                 )}
                             </div>
-                            <div className="bg-[#0a0b14] p-3 rounded-b-xl flex items-center justify-between border-t border-cyan-500/20">
+                                <div className="glass p-3 rounded-b-xl flex items-center justify-between border-t border-cyan-500/20">
                                 <div className="flex items-center text-cyan-400 text-[12px] font-semibold">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                                     Chiffré de bout en bout
@@ -250,7 +250,7 @@ const UserFooter = ({
                             <Settings size={16} />
                         </button>
                         {menuOpen && (
-                            <div ref={menuRef} className="absolute right-0 bottom-full mb-2 w-[220px] bg-[#050511]/95 backdrop-blur-md rounded-xl shadow-[0_0_30px_rgba(34,211,238,0.15)] py-2 px-2 z-50 border border-cyan-500/30">
+                             <div ref={menuRef} className="absolute right-0 bottom-full mb-2 w-[220px] glass-heavy rounded-xl shadow-[0_0_30px_rgba(34,211,238,0.15)] py-2 px-2 z-50 border border-cyan-500/30">
                                 <button onClick={updateCheck} className="w-full flex items-center justify-between px-3 py-2 text-[12px] font-bold tracking-wide uppercase text-cyan-100/80 rounded-lg hover:bg-cyan-500/20 hover:text-cyan-300 transition-colors mb-1" style={fontStyle}>
                                     System Update
                                     <svg width="14" height="14" fill="none" viewBox="0 0 24 24" className="text-cyan-400"><path d="M12 4v16m8-8H4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>

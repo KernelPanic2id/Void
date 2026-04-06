@@ -6,7 +6,11 @@ import { ToastProvider } from './context/ToastContext';
 import { ServerProvider } from './context/ServerContext';
 import { LoginView } from './components/auth/LoginView';
 import { ToastContainer } from './components/ui/ToastContainer';
+import { TitleBar } from './components/layout/TitleBar';
+import { ServerSidebar } from './components/sidebar/ServerSidebar';
 import Dashboard from './components/Dashboard';
+import bgImage from './assets/background.png';
+import { BentoLayoutProvider } from "./context/BentoLayoutContext";
 
 /**
  * Root application component that wraps the main interface with necessary context providers.
@@ -17,20 +21,36 @@ import Dashboard from './components/Dashboard';
  */
 export default function App() {
     return (
-        <AuthProvider>
-            <ToastProvider>
-                <ServerProvider>
-                    <VoiceProvider>
-                        <ChatProvider>
-                            <StreamProvider>
-                                <AppContent />
-                                <ToastContainer />
-                            </StreamProvider>
-                        </ChatProvider>
-                    </VoiceProvider>
-                </ServerProvider>
-            </ToastProvider>
-        </AuthProvider>
+        <div
+            className="flex flex-col h-screen overflow-hidden relative"
+            style={{
+                backgroundImage: `url(${bgImage})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat',
+            }}
+        >
+            {/* Dark overlay for readability on top of background image */}
+            <div className="absolute inset-0 bg-[#020208]/35 pointer-events-none z-0" />
+            <TitleBar />
+            <AuthProvider>
+                <ToastProvider>
+                    <ServerProvider>
+                        <VoiceProvider>
+                            <ChatProvider>
+                                <StreamProvider>
+                                    {/* --- Ajout du provider Bento ici --- */}
+                                    <BentoLayoutProvider>
+                                        <AppContent />
+                                        <ToastContainer />
+                                    </BentoLayoutProvider>
+                                </StreamProvider>
+                            </ChatProvider>
+                        </VoiceProvider>
+                    </ServerProvider>
+                </ToastProvider>
+            </AuthProvider>
+        </div>
     );
 }
 
@@ -42,5 +62,11 @@ export default function App() {
  */
 function AppContent() {
     const { isAuthenticated, login } = useAuth();
-    return isAuthenticated ? <Dashboard /> : <LoginView onLogin={login} />;
+    if (!isAuthenticated) return <LoginView onLogin={login} />;
+    return (
+        <>
+            <ServerSidebar />
+            <Dashboard />
+        </>
+    );
 }

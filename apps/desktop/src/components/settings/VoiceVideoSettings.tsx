@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useVoiceStore } from "../../context/VoiceContext";
+import { SelectInput } from "../ui/SelectInput";
+import { SelectInputOption } from "../../models/selectInput.model";
 
 export const VoiceVideoSettings = () => {
     const { 
@@ -42,6 +44,22 @@ export const VoiceVideoSettings = () => {
         };
     }, [rawMicVolumeRef]);
 
+    const micOptions: SelectInputOption[] = [
+        { value: "", label: "Défaut" },
+        ...microphones.map(mic => ({
+            value: mic.deviceId,
+            label: mic.label || `Microphone ${mic.deviceId.slice(0, 5)}`
+        }))
+    ];
+
+    const speakerOptions: SelectInputOption[] = [
+        { value: "", label: "Défaut" },
+        ...speakers.map(spk => ({
+            value: spk.deviceId,
+            label: spk.label || `Haut-parleur ${spk.deviceId.slice(0, 5)}`
+        }))
+    ];
+
     return (
         <div className="flex flex-col gap-8 animate-in fade-in duration-500">
             <h2 className="text-cyan-50 text-[24px] font-black uppercase tracking-wider drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">
@@ -49,7 +67,7 @@ export const VoiceVideoSettings = () => {
             </h2>
 
             {/* Section Périphériques */}
-            <div className="bg-[#050511] border border-cyan-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.05)] relative group">
+            <div className="glass border border-cyan-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.05)] relative group">
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/10 to-transparent pointer-events-none rounded-xl" />
                 
                 <h3 className="text-cyan-500/70 text-[11px] font-black uppercase tracking-widest mb-5">Périphériques Audio</h3>
@@ -58,41 +76,83 @@ export const VoiceVideoSettings = () => {
                     {/* Périphérique d'entrée */}
                     <div className="flex flex-col gap-2">
                         <label className="text-cyan-100/60 font-bold text-[13px]">Périphérique d'entrée</label>
-                        <select 
+                        <SelectInput
                             value={selectedMic || ''}
-                            onChange={(e) => setSelectedMic(e.target.value)}
-                            className="w-full bg-[#0a0b14] text-cyan-50 px-4 py-3 rounded-lg border border-cyan-500/30 focus:border-cyan-400 focus:shadow-[0_0_20px_rgba(34,211,238,0.2)] focus:outline-none transition-all font-medium"
-                        >
-                            <option value="">Défaut</option>
-                            {microphones.map(mic => (
-                                <option key={mic.deviceId} value={mic.deviceId}>
-                                    {mic.label || `Microphone ${mic.deviceId.slice(0,5)}`}
-                                </option>
-                            ))}
-                        </select>
+                            options={micOptions}
+                            onChange={(val: string) => setSelectedMic(val)}
+                            placeholder="Défaut"
+                        />
                     </div>
 
                     {/* Périphérique de sortie */}
                     <div className="flex flex-col gap-2">
                         <label className="text-cyan-100/60 font-bold text-[13px]">Périphérique de sortie</label>
-                        <select 
+                        <SelectInput
                             value={selectedSpeaker || ''}
-                            onChange={(e) => setSelectedSpeaker(e.target.value)}
-                            className="w-full bg-[#0a0b14] text-cyan-50 px-4 py-3 rounded-lg border border-cyan-500/30 focus:border-cyan-400 focus:shadow-[0_0_20px_rgba(34,211,238,0.2)] focus:outline-none transition-all font-medium"
-                        >
-                            <option value="">Défaut</option>
-                            {speakers.map(spk => (
-                                <option key={spk.deviceId} value={spk.deviceId}>
-                                    {spk.label || `Haut-parleur ${spk.deviceId.slice(0,5)}`}
-                                </option>
-                            ))}
-                        </select>
+                            options={speakerOptions}
+                            onChange={(val: string) => setSelectedSpeaker(val)}
+                            placeholder="Défaut"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            {/* Section Traitement Artificiel WASM */}
+            <div className="glass border border-cyan-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.05)] relative group">
+                <div className="absolute inset-0 bg-gradient-to-bl from-cyan-900/10 to-transparent pointer-events-none rounded-xl" />
+                
+                <div className="flex items-center gap-3 mb-5">
+                    <h3 className="text-cyan-500/70 text-[11px] font-black uppercase tracking-widest">Traitement Artificiel</h3>
+                    <span className="bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-[0_0_10px_rgba(34,211,238,0.3)]">
+                        WASM
+                    </span>
+                </div>
+
+                <div className="flex flex-col gap-3 relative z-10">
+                    {/* Noise Gate WASM */}
+                    <div className="glass-light rounded-lg p-4 flex items-center justify-between hover:border-cyan-500/30 transition-all group/card">
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-purple-500/30 group-hover/card:bg-purple-400 transition-colors rounded-l-lg" />
+                        <div className="flex flex-col gap-1 pl-2">
+                            <span className="text-cyan-50 font-bold text-[14px]">Noise Gate WASM (Rust)</span>
+                            <span className="text-cyan-500/50 text-[12px] font-medium">
+                                Réduit automatiquement les bruits de fond constants.
+                            </span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                className="sr-only peer" 
+                                checked={smartGateEnabled ?? false} 
+                                onChange={(e) => setSmartGateEnabled?.(e.target.checked)} 
+                            />
+                            <div className="w-11 h-6 bg-[#1a1c24] border border-cyan-500/20 rounded-full peer peer-checked:bg-cyan-500 peer-checked:border-cyan-400 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"></div>
+                        </label>
+                    </div>
+
+                    {/* Réduction de bruit WebRTC */}
+                    <div className="glass-light rounded-lg p-4 flex items-center justify-between hover:border-cyan-500/30 transition-all group/card">
+                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-500/30 group-hover/card:bg-cyan-400 transition-colors rounded-l-lg" />
+                        <div className="flex flex-col gap-1 pl-2">
+                            <span className="text-cyan-50 font-bold text-[14px]">Réduction de bruit WebRTC</span>
+                            <span className="text-cyan-500/50 text-[12px] font-medium">
+                                Utilise l'algorithme intégré de réduction de bruit du navigateur.
+                            </span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                            <input 
+                                type="checkbox" 
+                                className="sr-only peer" 
+                                checked={webrtcNoiseSuppressionEnabled ?? true} 
+                                onChange={(e) => setWebrtcNoiseSuppressionEnabled?.(e.target.checked)} 
+                            />
+                            <div className="w-11 h-6 bg-[#1a1c24] border border-cyan-500/20 rounded-full peer peer-checked:bg-cyan-500 peer-checked:border-cyan-400 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"></div>
+                        </label>
                     </div>
                 </div>
             </div>
 
             {/* Section Sensibilité Micro */}
-            <div className="bg-[#050511] border border-cyan-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.05)] relative group">
+            <div className="glass border border-cyan-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.05)] relative group">
                 <div className="absolute inset-0 bg-gradient-to-tr from-purple-900/10 to-transparent pointer-events-none rounded-xl" />
                 
                 <div className="flex items-center justify-between mb-5">
@@ -106,7 +166,7 @@ export const VoiceVideoSettings = () => {
                                 checked={vadAuto ?? true} 
                                 onChange={(e) => setVadAuto?.(e.target.checked)} 
                             />
-                            <div className="w-11 h-6 bg-[#0a0b14] border border-cyan-500/30 rounded-full peer peer-checked:bg-cyan-500 peer-checked:border-cyan-400 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"></div>
+                            <div className="w-11 h-6 glass border border-cyan-500/30 rounded-full peer peer-checked:bg-cyan-500 peer-checked:border-cyan-400 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"></div>
                         </label>
                     </div>
                 </div>
@@ -114,7 +174,7 @@ export const VoiceVideoSettings = () => {
                 <div className={`flex flex-col gap-3 relative z-10 transition-all duration-300 ${vadAuto ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
                     {/* Barre de captation voix + slider */}
                     <div className="relative w-full h-6 flex items-center">
-                        <div className="absolute left-0 w-full h-3 rounded-full overflow-hidden bg-[#0a0b14] border border-cyan-500/20 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]">
+                        <div className="absolute left-0 w-full h-3 rounded-full overflow-hidden glass border border-cyan-500/20 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]">
                             {/* Zone avant/après seuil */}
                             <div 
                                 className="absolute inset-0" 
@@ -146,60 +206,6 @@ export const VoiceVideoSettings = () => {
                     <div className="flex justify-between text-[10px] text-cyan-500/40 font-black uppercase tracking-widest">
                         <span>Sensible</span>
                         <span>Fort</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Section Traitement Artificiel WASM */}
-            <div className="bg-[#050511] border border-cyan-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.05)] relative group">
-                <div className="absolute inset-0 bg-gradient-to-bl from-cyan-900/10 to-transparent pointer-events-none rounded-xl" />
-                
-                <div className="flex items-center gap-3 mb-5">
-                    <h3 className="text-cyan-500/70 text-[11px] font-black uppercase tracking-widest">Traitement Artificiel</h3>
-                    <span className="bg-cyan-500/20 border border-cyan-500/50 text-cyan-400 text-[9px] font-black uppercase px-2 py-0.5 rounded shadow-[0_0_10px_rgba(34,211,238,0.3)]">
-                        WASM
-                    </span>
-                </div>
-
-                <div className="flex flex-col gap-3 relative z-10">
-                    {/* Noise Gate WASM */}
-                    <div className="bg-[#0a0b14] rounded-lg p-4 flex items-center justify-between border border-cyan-500/10 hover:border-cyan-500/30 transition-all group/card">
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-purple-500/30 group-hover/card:bg-purple-400 transition-colors rounded-l-lg" />
-                        <div className="flex flex-col gap-1 pl-2">
-                            <span className="text-cyan-50 font-bold text-[14px]">Noise Gate WASM (Rust)</span>
-                            <span className="text-cyan-500/50 text-[12px] font-medium">
-                                Réduit automatiquement les bruits de fond constants.
-                            </span>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input 
-                                type="checkbox" 
-                                className="sr-only peer" 
-                                checked={smartGateEnabled ?? false} 
-                                onChange={(e) => setSmartGateEnabled?.(e.target.checked)} 
-                            />
-                            <div className="w-11 h-6 bg-[#1a1c24] border border-cyan-500/20 rounded-full peer peer-checked:bg-cyan-500 peer-checked:border-cyan-400 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"></div>
-                        </label>
-                    </div>
-
-                    {/* Réduction de bruit WebRTC */}
-                    <div className="bg-[#0a0b14] rounded-lg p-4 flex items-center justify-between border border-cyan-500/10 hover:border-cyan-500/30 transition-all group/card">
-                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-cyan-500/30 group-hover/card:bg-cyan-400 transition-colors rounded-l-lg" />
-                        <div className="flex flex-col gap-1 pl-2">
-                            <span className="text-cyan-50 font-bold text-[14px]">Réduction de bruit WebRTC</span>
-                            <span className="text-cyan-500/50 text-[12px] font-medium">
-                                Utilise l'algorithme intégré de réduction de bruit du navigateur.
-                            </span>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input 
-                                type="checkbox" 
-                                className="sr-only peer" 
-                                checked={webrtcNoiseSuppressionEnabled ?? true} 
-                                onChange={(e) => setWebrtcNoiseSuppressionEnabled?.(e.target.checked)} 
-                            />
-                            <div className="w-11 h-6 bg-[#1a1c24] border border-cyan-500/20 rounded-full peer peer-checked:bg-cyan-500 peer-checked:border-cyan-400 after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-5 shadow-[inset_0_0_10px_rgba(0,0,0,0.5)]"></div>
-                        </label>
                     </div>
                 </div>
             </div>
