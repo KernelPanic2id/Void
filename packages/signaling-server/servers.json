@@ -1,0 +1,46 @@
+[
+  {
+    "id": "b101c68b-1c7b-4fb1-8de0-ea6037e806b2",
+    "name": "Test",
+    "owner_public_key": "FCTkVX/TFMLUy6Ya5VtlsxK68GY6Y11zalrTqaR96GM=",
+    "invite_key": "2f01e5c0-5436-46f3-a2d3-d8bd14e937df",
+    "icon": null,
+    "channels": [
+      {
+        "id": "75378313-9551-44e4-b941-a62dc9c56cd6",
+        "name": "general",
+        "type": "text"
+      },
+      {
+        "id": "4fd1232b-8bd6-4751-981e-08a277fce5cb",
+        "name": "General",
+        "type": "voice"
+      }
+    ],
+    "members": [
+      "FCTkVX/TFMLUy6Ya5VtlsxK68GY6Y11zalrTqaR96GM="
+    ]
+  },
+  {
+    "id": "0be6dcb6-62b0-4d63-b29e-a3e3463717bf",
+    "name": "Test",
+    "owner_public_key": "FCTkVX/TFMLUy6Ya5VtlsxK68GY6Y11zalrTqaR96GM=",
+    "invite_key": "7aec6921-3369-4f45-ba8c-fc3d752e57a9",
+    "icon": null,
+    "channels": [
+      {
+        "id": "55a93a68-61e5-4bb2-9cd6-a7344fabbb8e",
+        "name": "general",
+        "type": "text"
+      },
+      {
+        "id": "27f3fcd9-ae83-4692-96dc-dff5b7a0ba5e",
+        "name": "General",
+        "type": "voice"
+      }
+    ],
+    "members": [
+      "FCTkVX/TFMLUy6Ya5VtlsxK68GY6Y11zalrTqaR96GM="
+    ]
+  }
+]
