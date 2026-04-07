@@ -27,3 +27,5 @@ uuid = { version = "1.23.0", features = ["v4", "serde"] }
 prost = "0.13"
 jsonwebtoken = "9"
 argon2 = "0.5"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+base64 = "0.22"

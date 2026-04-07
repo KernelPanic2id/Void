@@ -249,6 +249,27 @@ pub fn crc32_hash(data: &[u8]) -> u32 {
     hasher.finalize()
 }
 
+/// Computes a stable device fingerprint from concatenated browser signals.
+/// Returns a 16-char hex string built from two independent CRC32 passes
+/// to reduce collision probability.
+#[wasm_bindgen]
+pub fn compute_fingerprint(signals: &str) -> String {
+    use crc32fast::Hasher;
+
+    let bytes = signals.as_bytes();
+
+    let mut h1 = Hasher::new_with_initial(0x564F_4944);
+    h1.update(bytes);
+    let part_a = h1.finalize();
+
+    let mut h2 = Hasher::new_with_initial(0x4650_5249);
+    h2.update(bytes);
+    h2.update(&part_a.to_le_bytes());
+    let part_b = h2.finalize();
+
+    format!("{:08x}{:08x}", part_a, part_b)
+}
+
 #[wasm_bindgen]
 pub fn check_quality(bitrate: u32) -> String {
     if bitrate < 5000 {

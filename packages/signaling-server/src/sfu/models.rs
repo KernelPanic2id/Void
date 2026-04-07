@@ -22,6 +22,8 @@ pub struct Server {
     pub invite_key: String,
     pub icon: Option<String>,
     pub channels: Vec<ServerChannel>,
+    #[serde(default)]
+    pub members: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -62,6 +64,7 @@ pub enum ClientMessage {
         channel_id: String,
         user_id: String,
         username: String,
+        fingerprint: Option<String>,
     },
     #[serde(rename_all = "camelCase")]
     Leave { channel_id: String, user_id: String },

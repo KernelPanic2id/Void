@@ -225,6 +225,7 @@ pub fn run() {
             identity::update_identity_pseudo,
             identity::update_identity_avatar,
             identity::recover_identity,
+            identity::sign_message,
         ])
         .setup(|app| {
             let handle = app.handle().clone();

@@ -1,64 +1,78 @@
-import { createContext, useContext, useState, PropsWithChildren } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, PropsWithChildren } from 'react';
 import { Server, ServerChannel } from '../models/server.model';
 import ServerContextProps from '../models/serverContext.model';
+import { useAuth } from './AuthContext';
+import * as serverApi from '../api/server.api';
 
 const ServerContext = createContext<ServerContextProps | undefined>(undefined);
 
 export const ServerProvider = ({ children }: PropsWithChildren) => {
   const [servers, setServers] = useState<Server[]>([]);
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { publicKey } = useAuth();
 
-  const createServer = (name: string) => {
-    const _id = crypto.randomUUID();
-    const _newServer: Server = {
-      id: _id,
-      name,
-      ownerPublicKey: '',
-      inviteKey: '',
-      channels: []
-    };
-    setServers(prev => [...prev, _newServer]);
-    setActiveServerId(_id);
-  };
+  const fetchServers = useCallback(async () => {
+    setLoading(true);
+    try {
+      const _list = await serverApi.listServers();
+      setServers(_list);
+    } catch (err) {
+      console.error('Failed to fetch servers:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const joinServer = (inviteKey: string) => {
-    // TODO: Call websocket / backend here
-    console.log("Join server", inviteKey);
-  };
+  useEffect(() => { fetchServers(); }, [fetchServers]);
 
-  const createChannel = (serverId: string, channel: Omit<ServerChannel, 'id'>) => {
-    setServers(prev => prev.map(server => {
-      if (server.id === serverId) {
-        return {
-          ...server,
-          channels: [...server.channels, { ...channel, id: crypto.randomUUID() }]
-        };
-      }
-      return server;
-    }));
-  };
+  const createServer = useCallback(async (name: string) => {
+    if (!publicKey) return;
+    const _server = await serverApi.createServer(name, publicKey);
+    setServers(prev => [...prev, _server]);
+    setActiveServerId(_server.id);
+  }, [publicKey]);
 
-  const deleteChannel = (serverId: string, channelId: string) => {
-    setServers(prev => prev.map(server => {
-      if (server.id === serverId) {
-        return {
-          ...server,
-          channels: server.channels.filter(c => c.id !== channelId)
-        };
-      }
-      return server;
-    }));
-  };
+  const deleteServer = useCallback(async (serverId: string) => {
+    if (!publicKey) return;
+    await serverApi.deleteServer(serverId, publicKey);
+    setServers(prev => prev.filter(s => s.id !== serverId));
+    if (activeServerId === serverId) setActiveServerId(null);
+  }, [publicKey, activeServerId]);
+
+  const joinServer = useCallback(async (inviteKey: string) => {
+    if (!publicKey) return;
+    const _server = await serverApi.joinServerByInvite(inviteKey, publicKey);
+    setServers(prev => {
+      const _exists = prev.some(s => s.id === _server.id);
+      return _exists ? prev.map(s => s.id === _server.id ? _server : s) : [...prev, _server];
+    });
+    setActiveServerId(_server.id);
+  }, [publicKey]);
+
+  const createChannel = useCallback(async (serverId: string, channel: Omit<ServerChannel, 'id'>) => {
+    if (!publicKey) return;
+    const _updated = await serverApi.createChannel(serverId, channel.name, channel.type, publicKey);
+    setServers(prev => prev.map(s => s.id === serverId ? _updated : s));
+  }, [publicKey]);
+
+  const deleteChannel = useCallback(async (serverId: string, channelId: string) => {
+    if (!publicKey) return;
+    const _updated = await serverApi.deleteChannel(serverId, channelId, publicKey);
+    setServers(prev => prev.map(s => s.id === serverId ? _updated : s));
+  }, [publicKey]);
+
+  const isOwner = useCallback((serverId: string) => {
+    if (!publicKey) return false;
+    const _server = servers.find(s => s.id === serverId);
+    return _server?.ownerPublicKey === publicKey;
+  }, [publicKey, servers]);
 
   return (
     <ServerContext.Provider value={{
-      servers,
-      activeServerId,
-      setActiveServerId,
-      createServer,
-      joinServer,
-      createChannel,
-      deleteChannel
+      servers, activeServerId, loading, setActiveServerId,
+      createServer, deleteServer, joinServer,
+      createChannel, deleteChannel, fetchServers, isOwner,
     }}>
       {children}
     </ServerContext.Provider>

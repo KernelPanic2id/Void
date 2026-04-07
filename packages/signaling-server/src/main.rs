@@ -47,17 +47,19 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let api = build_webrtc_api();
+    let auth_store = store::Store::load("auth_store.bin");
+    store::spawn_flusher(auth_store.clone());
+
     let app_state = Arc::new(AppState {
         peers: Mutex::new(HashMap::new()),
         channels: Mutex::new(HashMap::new()),
         server_registry: ServerRegistry::new(),
         api,
+        auth_store: auth_store.clone(),
     });
 
     metrics::spawn_stats_broadcaster(Arc::clone(&app_state));
 
-    let auth_store = store::Store::load("auth_store.bin");
-    store::spawn_flusher(auth_store.clone());
 
     // Fraud detection subsystem
     let ban_store = fraud::store::BanStore::load("ban_store.bin");
@@ -75,7 +77,8 @@ async fn main() {
         .route("/ws", get(ws_handler))
         .route("/health", get(|| async { "Healthy" }))
         .route("/metrics", get(metrics::handler))
-        .with_state(app_state)
+        .with_state(Arc::clone(&app_state))
+        .nest("/api/servers", sfu::routes::router().with_state(app_state))
         .nest("/api/auth", auth::router().with_state(auth_store.clone()))
         .nest("/api/friends", friends::router().with_state(auth_store))
         .layer(Extension(fraud_state))

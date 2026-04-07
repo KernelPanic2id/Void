@@ -1,6 +1,5 @@
 import { useCallback, useRef } from "react";
-
-type ResizeDirection = "right" | "bottom" | "corner";
+import { ResizeDirection } from "../types/resizeDirection.type";
 
 const CURSOR_MAP: Record<ResizeDirection, string> = {
     right: "col-resize",

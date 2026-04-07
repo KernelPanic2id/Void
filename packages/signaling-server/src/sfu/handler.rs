@@ -1,8 +1,11 @@
 use std::collections::{HashMap, HashSet};
+use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
+use axum::extract::ConnectInfo;
 use axum::response::IntoResponse;
+use axum::Extension;
 use futures_util::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 
@@ -10,17 +13,27 @@ use super::broadcast::{broadcast_to_channel, remove_peer, serialize_message};
 use super::models::{ClientMessage, PeerInfo, ServerMessage};
 use super::negotiation;
 use super::state::{AppState, ChannelState, PeerSession, RTCPStats};
+use crate::fraud::FraudState;
 
 /// Axum WebSocket upgrade handler.
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     axum::extract::State(state): axum::extract::State<Arc<AppState>>,
+    fraud: Option<Extension<FraudState>>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_socket(socket, state))
+    let ip = addr.ip().to_string();
+    let fraud_state = fraud.map(|Extension(f)| f);
+    ws.on_upgrade(move |socket| handle_socket(socket, state, ip, fraud_state))
 }
 
 /// Manages a single peer's WebSocket lifecycle.
-async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
+async fn handle_socket(
+    socket: WebSocket,
+    state: Arc<AppState>,
+    ip: String,
+    fraud_state: Option<FraudState>,
+) {
     let (mut socket_sender, mut socket_receiver) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
     let mut current_user_id: Option<String> = None;
@@ -50,7 +63,11 @@ async fn handle_socket(socket: WebSocket, state: Arc<AppState>) {
                 channel_id,
                 user_id,
                 username,
+                fingerprint,
             } => {
+                if let (Some(fp), Some(fs)) = (&fingerprint, &fraud_state) {
+                    fs.bans.record_fingerprint(fp, &ip);
+                }
                 handle_join(&state, &tx, &mut current_user_id, channel_id, user_id, username)
                     .await;
             }

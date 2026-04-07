@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use argon2::{self, Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::SaltString;
 use base64::{engine::general_purpose, Engine as _};
-use ed25519_dalek::SigningKey;
+use ed25519_dalek::{Signer, SigningKey};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use tauri::Manager;
@@ -349,6 +349,35 @@ pub fn update_identity_avatar(
     flush_cache_to_disk(&app, &map)?;
 
     Ok(public)
+}
+
+/// Signs an arbitrary message with the Ed25519 private key of the given identity.
+/// Returns the signature as a base64 string.
+#[tauri::command]
+pub fn sign_message(
+    app: tauri::AppHandle,
+    public_key: String,
+    message: String,
+) -> Result<String, String> {
+    let secrets = read_secrets(&app);
+    let secret = secrets
+        .iter()
+        .find(|s| s.public_key == public_key)
+        .ok_or("Private key not found for this identity")?;
+
+    let key_bytes = general_purpose::STANDARD
+        .decode(&secret.private_key)
+        .map_err(|e| format!("base64 decode private key: {e}"))?;
+
+    let signing_key = SigningKey::from_bytes(
+        key_bytes
+            .as_slice()
+            .try_into()
+            .map_err(|_| "Invalid key length")?,
+    );
+
+    let signature = signing_key.sign(message.as_bytes());
+    Ok(general_purpose::STANDARD.encode(signature.to_bytes()))
 }
 
 // ---------------------------------------------------------------------------

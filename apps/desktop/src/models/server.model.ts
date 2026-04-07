@@ -7,9 +7,10 @@ export interface ServerChannel {
 export interface Server {
   id: string;
   name: string;
-  ownerPublicKey: string; // The Ed25519 public key of the creator
-  inviteKey: string;      // Used for joining
+  ownerPublicKey: string;
+  inviteKey?: string;
   icon?: string;
   channels: ServerChannel[];
+  members: string[];
 }
 

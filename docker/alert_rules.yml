@@ -82,3 +82,11 @@ groups:
           summary: "Permanent ban escalation (recidivism)"
           description: "{{ $value }} IP(s) permanently banned in the last hour due to repeated offenses"
 
+      - alert: FingerprintAbuse
+        expr: increase(fraud_fingerprint_bans_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fingerprint abuse detected"
+          description: "{{ $value }} IP(s) banned in the last hour — same device fingerprint across multiple IPs"

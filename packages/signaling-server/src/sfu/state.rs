@@ -10,6 +10,7 @@ use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 
 use super::models::ServerRegistry;
+use crate::store::Store;
 
 // ---------------------------------------------------------------------------
 // SFU forwarding
@@ -139,6 +140,7 @@ pub struct AppState {
     pub channels: Mutex<HashMap<String, ChannelState>>,
     pub server_registry: ServerRegistry,
     pub api: API,
+    pub auth_store: Store,
 }
 
 /// A single user's connection and media state.

@@ -61,6 +61,14 @@ pub static PERMANENT_BANS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
     .unwrap()
 });
 
+pub static FINGERPRINT_BANS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "fraud_fingerprint_bans_total",
+        "IPs banned via shared device fingerprint abuse"
+    )
+    .unwrap()
+});
+
 pub static BLOCKED_REQUESTS: Lazy<IntCounter> = Lazy::new(|| {
     register_int_counter!(
         "fraud_blocked_requests_total",

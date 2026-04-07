@@ -5,7 +5,7 @@ use dashmap::DashMap;
 use prost::Message;
 use tokio::sync::Notify;
 
-use super::PERMANENT_BANS_TOTAL;
+use super::{FINGERPRINT_BANS_TOTAL, PERMANENT_BANS_TOTAL};
 
 // ---------------------------------------------------------------------------
 // Protobuf record for persisted bans
@@ -34,12 +34,23 @@ pub struct RecidivismRecord {
     pub ban_timestamps_ms: Vec<i64>,
 }
 
+/// Maps a device fingerprint to the set of distinct IPs that used it.
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct FingerprintRecord {
+    #[prost(string, tag = "1")]
+    pub fingerprint: String,
+    #[prost(string, repeated, tag = "2")]
+    pub ips: Vec<String>,
+}
+
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct BanSnapshot {
     #[prost(message, repeated, tag = "1")]
     pub bans: Vec<BanRecord>,
     #[prost(message, repeated, tag = "2")]
     pub recidivism: Vec<RecidivismRecord>,
+    #[prost(message, repeated, tag = "3")]
+    pub fingerprints: Vec<FingerprintRecord>,
 }
 
 // ---------------------------------------------------------------------------
@@ -52,10 +63,14 @@ const RECIDIVISM_THRESHOLD: usize = 3;
 /// Recidivism sliding window: 7 days in milliseconds.
 const RECIDIVISM_WINDOW_MS: i64 = 7 * 24 * 60 * 60 * 1000;
 
+/// When a single fingerprint appears on this many distinct IPs, all are banned.
+const FINGERPRINT_IP_LIMIT: usize = 50;
+
 #[derive(Clone)]
 pub struct BanStore {
     pub entries: Arc<DashMap<String, BanRecord>>,
     recidivism: Arc<DashMap<String, RecidivismRecord>>,
+    fingerprints: Arc<DashMap<String, FingerprintRecord>>,
     dirty: Arc<Notify>,
     path: Arc<String>,
 }
@@ -65,6 +80,7 @@ impl BanStore {
     pub fn load(path: &str) -> Self {
         let entries = Arc::new(DashMap::new());
         let recidivism = Arc::new(DashMap::new());
+        let fingerprints = Arc::new(DashMap::new());
 
         if let Ok(bytes) = std::fs::read(path) {
             if let Ok(snap) = BanSnapshot::decode(bytes.as_slice()) {
@@ -74,10 +90,14 @@ impl BanStore {
                 for r in snap.recidivism {
                     recidivism.insert(r.ip.clone(), r);
                 }
+                for f in snap.fingerprints {
+                    fingerprints.insert(f.fingerprint.clone(), f);
+                }
                 tracing::info!(
-                    "Loaded ban store ({} bans, {} recidivism records)",
+                    "Loaded ban store ({} bans, {} recidivism, {} fingerprints)",
                     entries.len(),
-                    recidivism.len()
+                    recidivism.len(),
+                    fingerprints.len()
                 );
             }
         }
@@ -85,6 +105,7 @@ impl BanStore {
         Self {
             entries,
             recidivism,
+            fingerprints,
             dirty: Arc::new(Notify::new()),
             path: Arc::new(path.to_string()),
         }
@@ -161,12 +182,62 @@ impl BanStore {
         }
     }
 
-    /// Flushes all bans and recidivism records to disk.
+    /// Associates a device fingerprint with the connecting IP.
+    /// If the fingerprint has been seen from too many distinct IPs,
+    /// permanently bans all of them and returns the list of banned IPs.
+    pub fn record_fingerprint(&self, fingerprint: &str, ip: &str) -> Vec<String> {
+        let mut entry = self
+            .fingerprints
+            .entry(fingerprint.to_string())
+            .or_insert_with(|| FingerprintRecord {
+                fingerprint: fingerprint.to_string(),
+                ips: Vec::new(),
+            });
+
+        let record = entry.value_mut();
+        if !record.ips.contains(&ip.to_string()) {
+            record.ips.push(ip.to_string());
+        }
+
+        if record.ips.len() >= FINGERPRINT_IP_LIMIT {
+            let ips_to_ban = record.ips.clone();
+            let reason = format!("fingerprint_abuse:{fingerprint}");
+            for banned_ip in &ips_to_ban {
+                self.entries.insert(
+                    banned_ip.clone(),
+                    BanRecord {
+                        ip: banned_ip.clone(),
+                        reason: reason.clone(),
+                        banned_at_ms: epoch_ms(),
+                        expires_at_ms: 0, // permanent
+                    },
+                );
+            }
+            FINGERPRINT_BANS_TOTAL.inc_by(ips_to_ban.len() as u64);
+            tracing::warn!(
+                "Fingerprint {fingerprint} seen on {} IPs — all permanently banned",
+                ips_to_ban.len()
+            );
+            self.dirty.notify_one();
+            return ips_to_ban;
+        }
+
+        self.dirty.notify_one();
+        Vec::new()
+    }
+
+    /// Flushes all bans, recidivism and fingerprint records to disk.
     pub fn flush(&self) -> Result<(), String> {
         let bans: Vec<BanRecord> = self.entries.iter().map(|r| r.value().clone()).collect();
         let recidivism: Vec<RecidivismRecord> =
             self.recidivism.iter().map(|r| r.value().clone()).collect();
-        let snap = BanSnapshot { bans, recidivism };
+        let fingerprints: Vec<FingerprintRecord> =
+            self.fingerprints.iter().map(|r| r.value().clone()).collect();
+        let snap = BanSnapshot {
+            bans,
+            recidivism,
+            fingerprints,
+        };
         let buf = snap.encode_to_vec();
 
         let path = Path::new(self.path.as_str());

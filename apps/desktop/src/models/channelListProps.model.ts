@@ -7,8 +7,10 @@ export default interface ChannelListProps {
     onSelectChannel: (channelId: string) => void;
     onCreateChannel: (channel: Omit<ServerChannel, 'id'>) => void;
     onDeleteChannel?: (channelId: string) => void;
+    onJoinVoice?: (channelId: string) => void;
     isOwner?: boolean;
     participants?: VoicePeer[];
     speakingUsers?: Map<string, boolean>;
+    voiceChannelId?: string | null;
 }
 
