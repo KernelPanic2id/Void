@@ -52,7 +52,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "🚨 Fraud: IP banned"
+          summary: "Fraud: IP banned"
           description: "{{ $value }} IP(s) banned in the last 5 minutes for suspicious activity"
 
       - alert: HighFraudAttempts
@@ -61,7 +61,7 @@ groups:
         labels:
           severity: warning
         annotations:
-          summary: "⚠️ High fraud attempt rate"
+          summary: "High fraud attempt rate"
           description: "Fraud attempts rate is {{ $value }}/s (type: {{ $labels.type }})"
 
       - alert: HighBlockedRequests
@@ -70,5 +70,15 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: "🛑 High rate of blocked requests from banned IPs"
+          summary: "High rate of blocked requests from banned IPs"
           description: "{{ $value }} blocked requests/s — potential ongoing attack"
+
+      - alert: PermanentBanEscalation
+        expr: increase(fraud_permanent_bans_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Permanent ban escalation (recidivism)"
+          description: "{{ $value }} IP(s) permanently banned in the last hour due to repeated offenses"
+

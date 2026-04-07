@@ -53,6 +53,14 @@ pub static BANNED_IPS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
     register_int_counter!("fraud_ip_banned_total", "Total IPs banned for fraud").unwrap()
 });
 
+pub static PERMANENT_BANS_TOTAL: Lazy<IntCounter> = Lazy::new(|| {
+    register_int_counter!(
+        "fraud_permanent_bans_total",
+        "IPs escalated to permanent ban via recidivism"
+    )
+    .unwrap()
+});
+
 pub static BLOCKED_REQUESTS: Lazy<IntCounter> = Lazy::new(|| {
     register_int_counter!(
         "fraud_blocked_requests_total",

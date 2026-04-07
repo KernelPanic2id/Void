@@ -5,6 +5,8 @@ use dashmap::DashMap;
 use prost::Message;
 use tokio::sync::Notify;
 
+use super::PERMANENT_BANS_TOTAL;
+
 // ---------------------------------------------------------------------------
 // Protobuf record for persisted bans
 // ---------------------------------------------------------------------------
@@ -22,19 +24,38 @@ pub struct BanRecord {
     pub expires_at_ms: i64,
 }
 
+/// Tracks how many times an IP has been banned recently (recidivism).
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct RecidivismRecord {
+    #[prost(string, tag = "1")]
+    pub ip: String,
+    /// Timestamps (epoch ms) of each ban within the sliding window.
+    #[prost(int64, repeated, tag = "2")]
+    pub ban_timestamps_ms: Vec<i64>,
+}
+
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct BanSnapshot {
     #[prost(message, repeated, tag = "1")]
     pub bans: Vec<BanRecord>,
+    #[prost(message, repeated, tag = "2")]
+    pub recidivism: Vec<RecidivismRecord>,
 }
 
 // ---------------------------------------------------------------------------
 // In-memory ban store
 // ---------------------------------------------------------------------------
 
+/// Number of bans within the recidivism window that triggers a permanent ban.
+const RECIDIVISM_THRESHOLD: usize = 3;
+
+/// Recidivism sliding window: 7 days in milliseconds.
+const RECIDIVISM_WINDOW_MS: i64 = 7 * 24 * 60 * 60 * 1000;
+
 #[derive(Clone)]
 pub struct BanStore {
     pub entries: Arc<DashMap<String, BanRecord>>,
+    recidivism: Arc<DashMap<String, RecidivismRecord>>,
     dirty: Arc<Notify>,
     path: Arc<String>,
 }
@@ -43,18 +64,27 @@ impl BanStore {
     /// Loads or creates the ban store from a `.bin` file.
     pub fn load(path: &str) -> Self {
         let entries = Arc::new(DashMap::new());
+        let recidivism = Arc::new(DashMap::new());
 
         if let Ok(bytes) = std::fs::read(path) {
             if let Ok(snap) = BanSnapshot::decode(bytes.as_slice()) {
                 for b in snap.bans {
                     entries.insert(b.ip.clone(), b);
                 }
-                tracing::info!("Loaded ban store ({} entries)", entries.len());
+                for r in snap.recidivism {
+                    recidivism.insert(r.ip.clone(), r);
+                }
+                tracing::info!(
+                    "Loaded ban store ({} bans, {} recidivism records)",
+                    entries.len(),
+                    recidivism.len()
+                );
             }
         }
 
         Self {
             entries,
+            recidivism,
             dirty: Arc::new(Notify::new()),
             path: Arc::new(path.to_string()),
         }
@@ -79,12 +109,14 @@ impl BanStore {
     }
 
     /// Bans an IP with a reason and optional duration (0 = permanent).
+    /// Automatically escalates to permanent ban after repeated offenses.
     pub fn ban(&self, ip: String, reason: String, duration_ms: i64) {
         let now = epoch_ms();
-        let expires = if duration_ms == 0 {
+        let effective_duration = self.apply_recidivism(&ip, now, duration_ms);
+        let expires = if effective_duration == 0 {
             0
         } else {
-            now + duration_ms
+            now + effective_duration
         };
         self.entries.insert(
             ip.clone(),
@@ -98,10 +130,43 @@ impl BanStore {
         self.dirty.notify_one();
     }
 
-    /// Flushes all bans to disk.
+    /// Updates the recidivism record for an IP and returns the effective
+    /// ban duration (0 = permanent if threshold exceeded).
+    fn apply_recidivism(&self, ip: &str, now: i64, requested_duration: i64) -> i64 {
+        if requested_duration == 0 {
+            return 0; // already permanent
+        }
+
+        let cutoff = now - RECIDIVISM_WINDOW_MS;
+        let mut entry = self
+            .recidivism
+            .entry(ip.to_string())
+            .or_insert_with(|| RecidivismRecord {
+                ip: ip.to_string(),
+                ban_timestamps_ms: Vec::new(),
+            });
+
+        let record = entry.value_mut();
+        record.ban_timestamps_ms.retain(|&ts| ts > cutoff);
+        record.ban_timestamps_ms.push(now);
+
+        if record.ban_timestamps_ms.len() >= RECIDIVISM_THRESHOLD {
+            PERMANENT_BANS_TOTAL.inc();
+            tracing::warn!(
+                "IP {ip} reached recidivism threshold ({RECIDIVISM_THRESHOLD} bans in 7d) — permanent ban"
+            );
+            0
+        } else {
+            requested_duration
+        }
+    }
+
+    /// Flushes all bans and recidivism records to disk.
     pub fn flush(&self) -> Result<(), String> {
         let bans: Vec<BanRecord> = self.entries.iter().map(|r| r.value().clone()).collect();
-        let snap = BanSnapshot { bans };
+        let recidivism: Vec<RecidivismRecord> =
+            self.recidivism.iter().map(|r| r.value().clone()).collect();
+        let snap = BanSnapshot { bans, recidivism };
         let buf = snap.encode_to_vec();
 
         let path = Path::new(self.path.as_str());
