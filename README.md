@@ -1,31 +1,126 @@
 # Void
 
-Welcome to Void, a cross-platform voice and signaling client. This project leverages Tauri, Web, WASM, Rust, and TypeScript to deliver high-performance, real-time audio communication for desktop and web platforms.
+A cross-platform, high-performance voice & video client built with **Rust**, **WebAssembly**, **Tauri v2** and **React 19**.
 
-## Features
+## Architecture
 
-- **Cross-platform**: Desktop (Tauri), Web, and WASM support
-- **High-performance audio**: Rust core compiled to WebAssembly for fast digital signal processing (DSP)
-- **Modern UI**: Built with React and Vite
-- **Real-time signaling**: WebRTC signaling server in Rust
-- **Modular architecture**: Easily extend or embed in other projects
-- **Audio worklet integration**: Custom audio processing with WASM-powered worklets
+```mermaid
+graph TB
+    subgraph "Desktop App — Tauri v2"
+        direction TB
+        REACT["React 19 + Vite<br/>(UI Layer)"]
+        CTX["7 Contexts<br/>Auth · Voice · Stream<br/>Chat · Server · Toast · BentoLayout"]
+        HOOKS["8 Hooks<br/>BentoDrag · BentoResize · Dashboard<br/>NetworkStats · PTT · VAD · Profile"]
+        API["API Layer<br/>Protobuf Content Negotiation"]
+        TAURI_CMD["Tauri Commands<br/>Identity · Bento Layout · TLS Pinning"]
+    end
 
-## Project Structure
+    subgraph "core-wasm — Rust → WASM"
+        DSP["Audio DSP<br/>SmartGate · TransientSuppressor · RNNoise"]
+        CODEC["Protobuf Codec<br/>prost + serde-wasm-bindgen"]
+        VID["Video Analysis<br/>Frame detection · Histogram"]
+        NET["Network Scoring<br/>Quality calculator"]
+    end
 
-- `apps/desktop/`: Desktop app (Tauri + React + Vite)
-- `packages/core-wasm/`: Audio/video core in Rust compiled to WebAssembly
-- `packages/signaling-server/`: WebRTC signaling server (Rust)
+    subgraph "Signaling Server — Rust"
+        SFU["SFU Engine<br/>webrtc-rs · JitterBuffer"]
+        AUTH["Auth Module<br/>JWT · Argon2id"]
+        FRIENDS["Friends Module<br/>CRUD + pending requests"]
+        STORE["Protobuf Store<br/>DashMap → .bin flush"]
+        METRICS["Prometheus Metrics<br/>Peers · Channels · Bandwidth"]
+    end
 
-## Main Scripts
+    REACT --> CTX --> HOOKS
+    HOOKS --> API
+    API -- "Protobuf / JSON" --> AUTH
+    API -- "Protobuf / JSON" --> FRIENDS
+    REACT -- "AudioWorklet" --> DSP
+    REACT -- "Worker" --> VID
+    HOOKS -- "WebSocket (TLS pinned)" --> SFU
+    HOOKS --> NET
+    API --> CODEC
+    TAURI_CMD -- "IPC" --> REACT
+    SFU --> STORE
+    AUTH --> STORE
+    FRIENDS --> STORE
+```
 
-Run from the root or the relevant folder:
+## Tech Stack
 
-- `pnpm install`: Install dependencies
-- `pnpm dev`: Start the desktop app in development mode
-- `pnpm build`: Build the desktop app
-- `pnpm build:worklet`: Build the audio worklet (generates JS in `public/worker/`)
-- `pnpm tauri build`: Native desktop build (Tauri)
+| Layer | Technologies |
+|---|---|
+| **Desktop Shell** | Tauri v2, Rust, TLS Certificate Pinning |
+| **Frontend** | React 19, TypeScript, TailwindCSS v4, Vite 7 |
+| **Real-time Audio** | WebRTC, AudioWorklet, RNNoise, WASM DSP |
+| **WASM Core** | Rust, wasm-bindgen, prost (protobuf) |
+| **Signaling Server** | Axum, Tokio, webrtc-rs, DashMap |
+| **Auth** | Ed25519 (local keypair), Argon2id, JWT HS256 |
+| **Observability** | Prometheus, Grafana, Alertmanager |
+| **Serialization** | Protobuf (prost) with JSON fallback |
+
+## Monorepo Structure
+
+```
+void/
+├── apps/desktop/              # Tauri + React + Vite desktop app
+│   ├── src/                   # React frontend (contexts, hooks, components)
+│   ├── src-tauri/             # Rust backend (identity, bento layout, TLS)
+│   └── public/worker/         # Compiled audio worklets
+├── packages/
+│   ├── core-wasm/             # Rust → WASM (DSP, codec, video, network)
+│   └── signaling-server/      # Rust signaling + SFU + auth + friends
+├── docker/                    # Prometheus, Grafana, Alertmanager configs
+├── Cargo.toml                 # Rust workspace
+└── pnpm-workspace.yaml        # pnpm workspace
+```
+
+## Key Flows
+
+### Authentication
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant T as Tauri (Rust)
+    participant R as React
+    participant W as core-wasm
+    participant S as Signaling Server
+
+    U->>R: Create identity (pseudo + password)
+    R->>T: create_identity (IPC)
+    T->>T: Ed25519 keypair + Argon2id hash
+    T-->>R: Identity { publicKey, pseudo }
+    R->>W: encodeRegisterBody(...)
+    W-->>R: Uint8Array (protobuf)
+    R->>S: POST /api/auth/register (protobuf)
+    S->>S: Argon2id verify + store + JWT sign
+    S-->>R: AuthResponse { token, user }
+    R->>W: decodeAuthResponse(bytes)
+    W-->>R: { token, user }
+```
+
+### Voice (SFU WebRTC)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant WS as WebSocket (TLS)
+    participant SFU as SFU Engine
+    participant PC as PeerConnection (webrtc-rs)
+
+    C->>WS: { type: "join", channelId, userId }
+    SFU-->>C: { type: "joined", peers, startedAt }
+    C->>C: getUserMedia() → AudioWorklet (WASM DSP)
+    C->>WS: { type: "offer", sdp }
+    SFU->>PC: create PeerConnection + set remote SDP
+    PC-->>SFU: SDP answer
+    SFU-->>C: { type: "answer", sdp }
+    C->>WS: { type: "ice", candidate }
+    SFU->>PC: add ICE candidate
+
+    Note over SFU,PC: Tracks forwarded via ForwarderState + JitterBuffer (30ms)
+    SFU-->>C: { type: "trackMap", userId, trackId, kind }
+```
 
 ## Quick Start
 
@@ -35,59 +130,165 @@ cd apps/desktop
 pnpm dev
 ```
 
-## Audio Worklet Troubleshooting
+### Build WASM Core
 
-- The file `noise-gate.worklet.js` must be generated in `apps/desktop/public/worker/`.
-- The path used in the code must be `/worker/noise-gate.worklet.js`.
-- If you see "Unable to load a worklet's module", check the file presence and path.
+```sh
+cd packages/core-wasm
+wasm-pack build --target web --out-dir ../../apps/desktop/src/pkg
+```
 
-## Download
+### Build Audio Worklet
 
-Releases and install instructions will be available on the [Releases page](https://github.com/RaphaelTaibi/Void/releases).
+```sh
+cd apps/desktop
+pnpm build:worklet
+```
 
-## Changelog
+### Native Desktop Build
 
-See the [Changelog](./CHANGELOG.md) for version history.
+```sh
+pnpm tauri build
+```
+
+## Observability (Docker)
+
+```sh
+docker compose up -d
+```
+
+Starts Prometheus (`:9090`), Grafana (`:3000`), Alertmanager (`:9093`), Node Exporter (`:9100`).
 
 ## License
 
-This project is licensed under the **Business Source License 1.1 (BSL-1.1)**.  
-See the [LICENSE](./LICENSE) file for full terms.
-
-For 3rd-party licences, see LICENSE. The licensing information is considered to be part of the documentation.
+**Business Source License 1.1 (BSL-1.1)** — See [LICENSE](./LICENSE).
 
 ---
 
 # Void (FR)
 
-Bienvenue sur Void, un client vocal et de signalisation multiplateforme. Ce projet s'appuie sur Tauri, Web, WASM, Rust et TypeScript pour offrir une communication audio temps réel performante sur desktop et web.
+Client vocal et vidéo multiplateforme haute performance construit avec **Rust**, **WebAssembly**, **Tauri v2** et **React 19**.
 
-## Fonctionnalités
+## Architecture
 
-- **Multiplateforme** : Desktop (Tauri), Web et WASM
-- **Audio haute performance** : Noyau Rust compilé en WebAssembly pour un traitement DSP rapide
-- **UI moderne** : Conçue avec React et Vite
-- **Signalisation temps réel** : Serveur WebRTC en Rust
-- **Architecture modulaire** : Extensible et intégrable facilement
-- **Intégration audio worklet** : Traitement audio personnalisé avec worklets propulsés par WASM
+```mermaid
+graph TB
+    subgraph "Application Desktop — Tauri v2"
+        direction TB
+        REACT["React 19 + Vite<br/>(Couche UI)"]
+        CTX["7 Contexts<br/>Auth · Voice · Stream<br/>Chat · Server · Toast · BentoLayout"]
+        HOOKS["8 Hooks<br/>BentoDrag · BentoResize · Dashboard<br/>NetworkStats · PTT · VAD · Profile"]
+        API["Couche API<br/>Négociation de contenu Protobuf"]
+        TAURI_CMD["Commandes Tauri<br/>Identité · Bento Layout · TLS Pinning"]
+    end
 
-## Structure du projet
+    subgraph "core-wasm — Rust → WASM"
+        DSP["Audio DSP<br/>SmartGate · TransientSuppressor · RNNoise"]
+        CODEC["Codec Protobuf<br/>prost + serde-wasm-bindgen"]
+        VID["Analyse Vidéo<br/>Détection de frames · Histogramme"]
+        NET["Scoring Réseau<br/>Calculateur de qualité"]
+    end
 
-- `apps/desktop/` : Application desktop (Tauri + React + Vite)
-- `packages/core-wasm/` : Noyau audio/vidéo en Rust compilé en WebAssembly
-- `packages/signaling-server/` : Serveur de signalisation WebRTC (Rust)
+    subgraph "Serveur de Signalisation — Rust"
+        SFU["Moteur SFU<br/>webrtc-rs · JitterBuffer"]
+        AUTH["Module Auth<br/>JWT · Argon2id"]
+        FRIENDS["Module Amis<br/>CRUD + requêtes en attente"]
+        STORE["Store Protobuf<br/>DashMap → flush .bin"]
+        METRICS["Métriques Prometheus<br/>Pairs · Salons · Bande passante"]
+    end
 
-## Scripts principaux
+    REACT --> CTX --> HOOKS
+    HOOKS --> API
+    API -- "Protobuf / JSON" --> AUTH
+    API -- "Protobuf / JSON" --> FRIENDS
+    REACT -- "AudioWorklet" --> DSP
+    REACT -- "Worker" --> VID
+    HOOKS -- "WebSocket (TLS pinné)" --> SFU
+    HOOKS --> NET
+    API --> CODEC
+    TAURI_CMD -- "IPC" --> REACT
+    SFU --> STORE
+    AUTH --> STORE
+    FRIENDS --> STORE
+```
 
-À lancer depuis la racine ou le dossier concerné :
+## Stack Technique
 
-- `pnpm install` : Installation des dépendances
-- `pnpm dev` : Lancer l'app desktop en mode développement
-- `pnpm build` : Build de l'app desktop
-- `pnpm build:worklet` : Build du worklet audio (génère le JS dans `public/worker/`)
-- `pnpm tauri build` : Build desktop natif (Tauri)
+| Couche | Technologies |
+|---|---|
+| **Shell Desktop** | Tauri v2, Rust, Certificate Pinning TLS |
+| **Frontend** | React 19, TypeScript, TailwindCSS v4, Vite 7 |
+| **Audio Temps Réel** | WebRTC, AudioWorklet, RNNoise, DSP WASM |
+| **Noyau WASM** | Rust, wasm-bindgen, prost (protobuf) |
+| **Serveur de Signalisation** | Axum, Tokio, webrtc-rs, DashMap |
+| **Auth** | Ed25519 (keypair local), Argon2id, JWT HS256 |
+| **Observabilité** | Prometheus, Grafana, Alertmanager |
+| **Sérialisation** | Protobuf (prost) avec fallback JSON |
 
-## Démarrage rapide
+## Structure du Monorepo
+
+```
+void/
+├── apps/desktop/              # App desktop Tauri + React + Vite
+│   ├── src/                   # Frontend React (contexts, hooks, composants)
+│   ├── src-tauri/             # Backend Rust (identité, bento layout, TLS)
+│   └── public/worker/         # Worklets audio compilés
+├── packages/
+│   ├── core-wasm/             # Rust → WASM (DSP, codec, vidéo, réseau)
+│   └── signaling-server/      # Signalisation Rust + SFU + auth + amis
+├── docker/                    # Configs Prometheus, Grafana, Alertmanager
+├── Cargo.toml                 # Workspace Rust
+└── pnpm-workspace.yaml        # Workspace pnpm
+```
+
+## Flux Principaux
+
+### Authentification
+
+```mermaid
+sequenceDiagram
+    participant U as Utilisateur
+    participant T as Tauri (Rust)
+    participant R as React
+    participant W as core-wasm
+    participant S as Serveur de Signalisation
+
+    U->>R: Créer identité (pseudo + mot de passe)
+    R->>T: create_identity (IPC)
+    T->>T: Keypair Ed25519 + hash Argon2id
+    T-->>R: Identity { publicKey, pseudo }
+    R->>W: encodeRegisterBody(...)
+    W-->>R: Uint8Array (protobuf)
+    R->>S: POST /api/auth/register (protobuf)
+    S->>S: Vérification Argon2id + stockage + signature JWT
+    S-->>R: AuthResponse { token, user }
+    R->>W: decodeAuthResponse(bytes)
+    W-->>R: { token, user }
+```
+
+### Voix (SFU WebRTC)
+
+```mermaid
+sequenceDiagram
+    participant C as Client
+    participant WS as WebSocket (TLS)
+    participant SFU as Moteur SFU
+    participant PC as PeerConnection (webrtc-rs)
+
+    C->>WS: { type: "join", channelId, userId }
+    SFU-->>C: { type: "joined", peers, startedAt }
+    C->>C: getUserMedia() → AudioWorklet (DSP WASM)
+    C->>WS: { type: "offer", sdp }
+    SFU->>PC: Crée PeerConnection + set remote SDP
+    PC-->>SFU: SDP answer
+    SFU-->>C: { type: "answer", sdp }
+    C->>WS: { type: "ice", candidate }
+    SFU->>PC: Ajout candidat ICE
+
+    Note over SFU,PC: Tracks relayés via ForwarderState + JitterBuffer (30ms)
+    SFU-->>C: { type: "trackMap", userId, trackId, kind }
+```
+
+## Démarrage Rapide
 
 ```sh
 pnpm install
@@ -95,23 +296,34 @@ cd apps/desktop
 pnpm dev
 ```
 
-## Dépannage worklet audio
+### Compiler le Noyau WASM
 
-- Le fichier `noise-gate.worklet.js` doit être généré dans `apps/desktop/public/worker/`.
-- Le chemin utilisé dans le code doit être `/worker/noise-gate.worklet.js`.
-- Si erreur "Unable to load a worklet's module", vérifier la présence du fichier et le chemin.
+```sh
+cd packages/core-wasm
+wasm-pack build --target web --out-dir ../../apps/desktop/src/pkg
+```
 
-## Téléchargement
+### Compiler le Worklet Audio
 
-Les releases et instructions d'installation seront disponibles sur la [page Releases](https://github.com/RaphaelTaibi/Void/releases).
+```sh
+cd apps/desktop
+pnpm build:worklet
+```
 
-## Changelog
+### Build Desktop Natif
 
-Voir le [Changelog](./CHANGELOG.md) pour l'historique des versions.
+```sh
+pnpm tauri build
+```
+
+## Observabilité (Docker)
+
+```sh
+docker compose up -d
+```
+
+Lance Prometheus (`:9090`), Grafana (`:3000`), Alertmanager (`:9093`), Node Exporter (`:9100`).
 
 ## Licence
 
-Ce projet est sous licence **Business Source License 1.1 (BSL-1.1)**.  
-Voir le fichier [LICENSE](./LICENSE) pour les termes complets.
-
-Pour les licences tierces, voir LICENSE. Les informations de licence font partie de la documentation.
+**Business Source License 1.1 (BSL-1.1)** — Voir [LICENSE](./LICENSE).
