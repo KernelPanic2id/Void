@@ -1,49 +1,33 @@
 import { Copy, LogOut, Trash2, Upload, User, Hash } from "lucide-react";
-import { useRef, useState, useEffect } from "react";
-import { useVoiceStore } from "../../context/VoiceContext";
-import { useAuth } from "../../context/AuthContext";
+import { useProfileSettings } from "../../hooks/useProfileSettings";
 
 export const ProfileSettings = () => {
-    const { voiceAvatar, setVoiceAvatar } = useVoiceStore();
-    const { username, publicKey, userTag, logout, updateUsername } = useAuth();
-
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const [nameInputValue, setNameInputValue] = useState(username || '');
-    const [isSaving, setIsSaving] = useState(false);
-    const [keyCopied, setKeyCopied] = useState(false);
-    const [tagCopied, setTagCopied] = useState(false);
-
-    useEffect(() => {
-        setNameInputValue(username || '');
-    }, [username]);
-
-    const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            setVoiceAvatar(event.target?.result as string);
-        };
-        reader.readAsDataURL(file);
-    };
-
-    const handleSaveName = () => {
-        const newName = nameInputValue.trim();
-        if (newName && newName !== username) {
-            setIsSaving(true);
-            updateUsername(newName);
-            setTimeout(() => {
-                setIsSaving(false);
-            }, 300);
-        }
-    };
+    const {
+        voiceAvatar,
+        username,
+        publicKey,
+        userTag,
+        fileInputRef,
+        nameInputValue,
+        setNameInputValue,
+        isSaving,
+        keyCopied,
+        tagCopied,
+        canSaveName,
+        handleAvatarUpload,
+        handleRemoveAvatar,
+        handleSaveName,
+        handleCopyTag,
+        handleCopyKey,
+        logout,
+    } = useProfileSettings();
 
     return (
         <div className="flex flex-col gap-8 animate-in fade-in duration-500">
             <h2 className="text-cyan-50 text-[24px] font-black uppercase tracking-wider drop-shadow-[0_0_10px_rgba(34,211,238,0.5)]">Mon Profil</h2>
 
             <div className="flex flex-col gap-8">
-                {/* Section Avatar */}
+                {/* Avatar section */}
                 <div className="glass border border-cyan-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.05)] relative group">
                     <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/10 to-transparent pointer-events-none rounded-xl" />
                     
@@ -64,7 +48,7 @@ export const ProfileSettings = () => {
                             {voiceAvatar && (
                                 <button 
                                     className="text-red-400 hover:text-red-300 hover:shadow-[0_0_10px_rgba(248,113,113,0.3)] text-[12px] flex items-center gap-1.5 font-bold uppercase tracking-wider self-start px-2 py-1 rounded transition-colors"
-                                    onClick={() => setVoiceAvatar(null)}
+                                    onClick={handleRemoveAvatar}
                                 >
                                     <Trash2 size={14} /> Réinitialiser
                                 </button>
@@ -73,7 +57,7 @@ export const ProfileSettings = () => {
                     </div>
                 </div>
 
-                {/* Section Pseudo */}
+                {/* Username section */}
                 <div className="glass border border-cyan-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.05)] relative group">
                     <div className="absolute inset-0 bg-gradient-to-tr from-purple-900/10 to-transparent pointer-events-none rounded-xl" />
                     
@@ -97,12 +81,12 @@ export const ProfileSettings = () => {
                                 className={`px-6 py-2.5 rounded-lg text-white font-bold text-[13px] transition-all flex items-center justify-center min-w-[140px] uppercase tracking-wider ${
                                     isSaving 
                                     ? 'bg-cyan-900/50 border border-cyan-700/50 cursor-wait' 
-                                    : nameInputValue.trim() && nameInputValue !== username 
+                                    : canSaveName 
                                         ? 'bg-gradient-to-r from-cyan-600 to-purple-600 hover:from-cyan-500 hover:to-purple-500 shadow-[0_0_15px_rgba(34,211,238,0.3)]' 
                                         : 'glass border border-cyan-500/20 text-cyan-500/30 cursor-not-allowed'
                                 }`}
                                 onClick={handleSaveName}
-                                disabled={!nameInputValue.trim() || nameInputValue === username || isSaving}
+                                disabled={!canSaveName || isSaving}
                             >
                                 {isSaving ? <span className="animate-pulse">Modification...</span> : 'Sauvegarder'}
                             </button>
@@ -110,7 +94,7 @@ export const ProfileSettings = () => {
                     </div>
                 </div>
 
-                {/* Section User Tag */}
+                {/* User tag section */}
                 <div className="glass border border-purple-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(168,85,247,0.05)] relative group">
                     <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 to-cyan-900/5 pointer-events-none rounded-xl" />
 
@@ -128,12 +112,7 @@ export const ProfileSettings = () => {
                         </div>
                         <button
                             className="p-2.5 glass rounded-lg border border-purple-500/30 text-purple-400 hover:bg-purple-500/20 hover:shadow-[0_0_15px_rgba(168,85,247,0.2)] transition-all flex-shrink-0 disabled:opacity-30"
-                            onClick={() => {
-                                if (!userTag) return;
-                                navigator.clipboard.writeText(userTag);
-                                setTagCopied(true);
-                                setTimeout(() => setTagCopied(false), 2000);
-                            }}
+                            onClick={handleCopyTag}
                             disabled={!userTag}
                             title="Copier le tag"
                         >
@@ -150,7 +129,7 @@ export const ProfileSettings = () => {
                     </p>
                 </div>
 
-                {/* Section Public Key */}
+                {/* Public key section */}
                 {publicKey && (
                     <div className="glass border border-cyan-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(34,211,238,0.05)] relative group">
                         <div className="absolute inset-0 bg-gradient-to-bl from-cyan-900/10 to-transparent pointer-events-none rounded-xl" />
@@ -163,11 +142,7 @@ export const ProfileSettings = () => {
                             </code>
                             <button
                                 className="p-2.5 glass rounded-lg border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20 hover:shadow-[0_0_15px_rgba(34,211,238,0.2)] transition-all flex-shrink-0"
-                                onClick={() => {
-                                    navigator.clipboard.writeText(publicKey);
-                                    setKeyCopied(true);
-                                    setTimeout(() => setKeyCopied(false), 2000);
-                                }}
+                                onClick={handleCopyKey}
                                 title="Copier la clé publique"
                             >
                                 <Copy size={16} />
@@ -184,7 +159,7 @@ export const ProfileSettings = () => {
                     </div>
                 )}
 
-                {/* Section Déconnexion */}
+                {/* Danger zone section */}
                 <div className="glass border border-red-500/20 p-6 rounded-xl shadow-[0_0_20px_rgba(248,113,113,0.05)] relative group">
                     <div className="absolute inset-0 bg-gradient-to-br from-red-900/10 to-transparent pointer-events-none rounded-xl" />
 
