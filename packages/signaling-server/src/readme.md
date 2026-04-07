@@ -1,10 +1,10 @@
-# 🎙️ Vocal-WASM-SFU - Signaling Server Backend
+# 🎙️ Void — Signaling Server Backend
 
 Serveur de signalisation WebRTC haute performance écrit en Rust pour des communications audio/vidéo en temps réel.
 
 ![Rust](https://img.shields.io/badge/Rust-1.70+-orange)
 ![WebRTC](https://img.shields.io/badge/WebRTC-SFU-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
+![License](https://img.shields.io/badge/License-BSL--1.1-yellow)
 
 ---
 
@@ -26,7 +26,7 @@ Serveur de signalisation WebRTC haute performance écrit en Rust pour des commun
 ---
 
 # 🏗️ Architecture
-![img.png](img.png)
+![img.png](diagram/img.png)
 ---
 
 # ✨ Fonctionnalités
@@ -75,8 +75,8 @@ sudo usermod -aG docker $USER
 ## **1. Cloner le Repository**
 
 ```bash 
-   git clone https://github.com/ton-utilisateur/discord-wasm-sfu.git
-   cd discord-wasm-sfu/packages/signaling-server
+   git clone https://github.com/RaphaelTaibi/Void.git
+   cd Void/packages/signaling-server
 ```
 
 ## **2. Générer les Certificats TLS**
@@ -84,7 +84,7 @@ sudo usermod -aG docker $USER
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem \
   -sha256 -days 365 -nodes -subj \
-  "/C=FR/ST=PACA/L=LaGarde/O=VocalWASM/CN=_ip_publique"
+  "/C=FR/ST=PACA/L=LaGarde/O=Void/CN=_ip_publique"
 ```
 ## **3. Compiler le Binaire**
 ```bash
@@ -530,5 +530,5 @@ docker compose logs signaling-server
 
 # **📝 Licence**
 
-Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+Ce projet est sous licence BSL-1.1. Voir le fichier [LICENSE](../../../LICENSE) pour plus de détails.
 

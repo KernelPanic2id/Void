@@ -1,6 +1,6 @@
-# Vocal WASM
+# Void
 
-Welcome to Vocal WASM, a cross-platform voice and signaling client inspired by Discord. This project leverages Tauri, Web, WASM, Rust, and TypeScript to deliver high-performance, real-time audio communication for desktop and web platforms.
+Welcome to Void, a cross-platform voice and signaling client. This project leverages Tauri, Web, WASM, Rust, and TypeScript to deliver high-performance, real-time audio communication for desktop and web platforms.
 
 ## Features
 
@@ -43,27 +43,24 @@ pnpm dev
 
 ## Download
 
-Releases and install instructions will be available on the [Releases page](https://github.com/RaphaelTaibi/discordWASM/releases).
+Releases and install instructions will be available on the [Releases page](https://github.com/RaphaelTaibi/Void/releases).
 
 ## Changelog
 
 See the [Changelog](./CHANGELOG.md) for version history.
 
-## Disclaimer
-**This project is an independent, open-source educational proof-of-concept. It is not affiliated with,
-endorsed by, or associated with Discord Inc. The UI design is intended as a study of modern
-communication interface patterns.**
-
 ## License
-MIT
+
+This project is licensed under the **Business Source License 1.1 (BSL-1.1)**.  
+See the [LICENSE](./LICENSE) file for full terms.
 
 For 3rd-party licences, see LICENSE. The licensing information is considered to be part of the documentation.
 
 ---
 
-# Vocal WASM (FR)
+# Void (FR)
 
-Bienvenue sur Vocal WASM, un client vocal et de signalisation multiplateforme inspiré de Discord. Ce projet s’appuie sur Tauri, Web, WASM, Rust et TypeScript pour offrir une communication audio temps réel performante sur desktop et web.
+Bienvenue sur Void, un client vocal et de signalisation multiplateforme. Ce projet s'appuie sur Tauri, Web, WASM, Rust et TypeScript pour offrir une communication audio temps réel performante sur desktop et web.
 
 ## Fonctionnalités
 
@@ -85,8 +82,8 @@ Bienvenue sur Vocal WASM, un client vocal et de signalisation multiplateforme in
 À lancer depuis la racine ou le dossier concerné :
 
 - `pnpm install` : Installation des dépendances
-- `pnpm dev` : Lancer l’app desktop en mode développement
-- `pnpm build` : Build de l’app desktop
+- `pnpm dev` : Lancer l'app desktop en mode développement
+- `pnpm build` : Build de l'app desktop
 - `pnpm build:worklet` : Build du worklet audio (génère le JS dans `public/worker/`)
 - `pnpm tauri build` : Build desktop natif (Tauri)
 
@@ -106,17 +103,15 @@ pnpm dev
 
 ## Téléchargement
 
-Les releases et instructions d’installation seront disponibles sur la [page Releases](https://github.com/RaphaelTaibi/discordWASM/releases).
+Les releases et instructions d'installation seront disponibles sur la [page Releases](https://github.com/RaphaelTaibi/Void/releases).
 
 ## Changelog
 
-Voir le [Changelog](./CHANGELOG.md) pour l’historique des versions.
-
-
-## Disclaimer
-**Ce logiciel est une preuve de concept technique. L'interface utilisateur est inspirée par les standards modernes de communication. Vocal WASM n'est pas affilié à Discord Inc.**
+Voir le [Changelog](./CHANGELOG.md) pour l'historique des versions.
 
 ## Licence
-MIT
+
+Ce projet est sous licence **Business Source License 1.1 (BSL-1.1)**.  
+Voir le fichier [LICENSE](./LICENSE) pour les termes complets.
 
 Pour les licences tierces, voir LICENSE. Les informations de licence font partie de la documentation.
