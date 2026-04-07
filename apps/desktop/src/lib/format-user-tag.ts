@@ -1,5 +1,5 @@
 /**
- * Builds a Discord-style user tag from a pseudo and a public key.
+ * Builds a user tag from a pseudo and a public key.
  * @param pseudo - The user's display name.
  * @param publicKey - The full Ed25519 public key (hex or base64).
  * @returns A tag in the format `pseudo#XXXX` using the last 4 characters of the key.

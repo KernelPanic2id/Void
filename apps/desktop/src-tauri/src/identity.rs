@@ -161,6 +161,7 @@ fn verify_password(password: &str, stored_hash: &str) -> Result<bool, String> {
 // ---------------------------------------------------------------------------
 
 /// Builds an `IdentityCache` from disk, running legacy migration first if needed.
+/// Always re-flushes to normalize the schema (e.g. newly added fields).
 pub fn init_cache(app: &tauri::AppHandle) -> IdentityCache {
     if let Err(e) = migrate_legacy(app) {
         eprintln!("Identity migration warning: {e}");
@@ -171,6 +172,11 @@ pub fn init_cache(app: &tauri::AppHandle) -> IdentityCache {
         .into_iter()
         .map(|m| (m.public_key.clone(), m))
         .collect();
+
+    // Re-flush to ensure all fields are present on disk
+    if let Err(e) = flush_cache_to_disk(app, &map) {
+        eprintln!("Schema normalization flush failed: {e}");
+    }
 
     IdentityCache(Mutex::new(map))
 }
