@@ -45,3 +45,30 @@ groups:
         annotations:
           summary: "Backend Signaling Server indisponible"
           description: "Le backend signaling-server est down depuis plus de 1 minute"
+
+      - alert: FraudIPBanned
+        expr: increase(fraud_ip_banned_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "🚨 Fraud: IP banned"
+          description: "{{ $value }} IP(s) banned in the last 5 minutes for suspicious activity"
+
+      - alert: HighFraudAttempts
+        expr: rate(fraud_attempts_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "⚠️ High fraud attempt rate"
+          description: "Fraud attempts rate is {{ $value }}/s (type: {{ $labels.type }})"
+
+      - alert: HighBlockedRequests
+        expr: rate(fraud_blocked_requests_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "🛑 High rate of blocked requests from banned IPs"
+          description: "{{ $value }} blocked requests/s — potential ongoing attack"

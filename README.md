@@ -64,7 +64,7 @@ graph TB
 void/
 ├── apps/desktop/              # Tauri + React + Vite desktop app
 │   ├── src/                   # React frontend (contexts, hooks, components)
-│   ├── src-tauri/             # Rust backend (identity, bento layout, TLS)
+│   ├── src-tauri/             # Rust backend (identity, Bento layout, TLS)
 │   └── public/worker/         # Compiled audio worklets
 ├── packages/
 │   ├── core-wasm/             # Rust → WASM (DSP, codec, video, network)
@@ -230,7 +230,7 @@ graph TB
 void/
 ├── apps/desktop/              # App desktop Tauri + React + Vite
 │   ├── src/                   # Frontend React (contexts, hooks, composants)
-│   ├── src-tauri/             # Backend Rust (identité, bento layout, TLS)
+│   ├── src-tauri/             # Backend Rust (identité, Bento layout, TLS)
 │   └── public/worker/         # Worklets audio compilés
 ├── packages/
 │   ├── core-wasm/             # Rust → WASM (DSP, codec, vidéo, réseau)

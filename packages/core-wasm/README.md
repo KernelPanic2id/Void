@@ -1,5 +1,6 @@
 # core-wasm
 
+
 High-performance Rust → WebAssembly module powering the Void client.  
 Handles **real-time DSP**, **media analysis**, **network scoring** and **protobuf codec** — all off the JS main thread.
 
@@ -368,11 +369,8 @@ packages/core-wasm/
 ```
 
 ---
----
 
-# 🇫🇷 Version Française
-
-# core-wasm
+# core-wasm (FR)
 
 Module Rust → WebAssembly haute performance au cœur du client Void.  
 Gère le **traitement audio temps réel (DSP)**, l'**analyse média**, le **scoring réseau** et le **codec protobuf** — le tout hors du thread principal JS.

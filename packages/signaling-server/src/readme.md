@@ -2,9 +2,6 @@
 
 High-performance WebRTC signaling server and SFU (Selective Forwarding Unit) written in **Rust** with **Axum**, **Tokio**, and **webrtc-rs**.
 
-![Rust](https://img.shields.io/badge/Rust-1.70+-orange)
-![WebRTC](https://img.shields.io/badge/WebRTC-SFU-blue)
-![License](https://img.shields.io/badge/License-BSL--1.1-yellow)
 
 ## Architecture
 

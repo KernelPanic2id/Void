@@ -2,6 +2,7 @@
   "name": "desktop",
   "private": true,
   "version": "0.2.1",
+  "license": "BSL-1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",

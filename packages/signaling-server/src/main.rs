@@ -1,5 +1,6 @@
 mod auth;
 mod errors;
+mod fraud;
 mod friends;
 mod metrics;
 mod models;
@@ -12,7 +13,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::{Router, routing::get};
+use axum::{Extension, Router, routing::get};
 use axum_server::tls_rustls::RustlsConfig;
 use rustls::crypto::aws_lc_rs;
 use tokio::sync::Mutex;
@@ -58,6 +59,18 @@ async fn main() {
     let auth_store = store::Store::load("auth_store.bin");
     store::spawn_flusher(auth_store.clone());
 
+    // Fraud detection subsystem
+    let ban_store = fraud::store::BanStore::load("ban_store.bin");
+    fraud::store::spawn_flusher(ban_store.clone());
+
+    let fraud_detector = Arc::new(fraud::detector::FraudDetector::new());
+    fraud::detector::spawn_cleanup(Arc::clone(&fraud_detector));
+
+    let fraud_state = fraud::FraudState {
+        bans: ban_store,
+        detector: fraud_detector,
+    };
+
     let app: Router<()> = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(|| async { "Healthy" }))
@@ -65,6 +78,7 @@ async fn main() {
         .with_state(app_state)
         .nest("/api/auth", auth::router().with_state(auth_store.clone()))
         .nest("/api/friends", friends::router().with_state(auth_store))
+        .layer(Extension(fraud_state))
         .layer(CorsLayer::permissive());
 
     let addr: SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
@@ -75,7 +89,12 @@ async fn main() {
             addr
         );
         let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
-        axum::serve(listener, app).await.unwrap();
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap();
     } else {
         let tls_config = RustlsConfig::from_pem_file(
             PathBuf::from("cert.pem"),
@@ -89,7 +108,7 @@ async fn main() {
             addr
         );
         axum_server::bind_rustls(addr, tls_config)
-            .serve(app.into_make_service())
+            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
             .await
             .unwrap();
     }

@@ -4,6 +4,8 @@ version = "0.1.20"
 description = "A Tauri App"
 authors = ["Raphael Taibi"]
 edition = "2021"
+license.workspace = true
+repository.workspace = true
 
 [lib]
 name = "desktop_lib"
@@ -34,6 +36,7 @@ base64 = "0.22"
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 argon2 = "0.5"
+crc32fast = "1.5"
 
 # Asynchrone
 tokio = { version = "1", features = ["full"] }

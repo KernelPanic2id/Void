@@ -1,0 +1,40 @@
+Third-Party Software Notices and Licenses
+==========================================
+
+Void includes third-party open source software components. Each component
+is listed below with its license. The full license texts are available in
+the licenses/ directory at the root of this repository.
+
+--------------------------------------------------------------------------
+
+1. @jitsi/rnnoise-wasm
+
+   Version:     0.2.1
+   Repository:  https://github.com/jitsi/rnnoise-wasm
+   License:     Apache License 2.0
+   License file: licenses/Apache-2.0.txt
+   Usage:       RNNoise noise suppression (Emscripten WASM module) used
+                within AudioWorklet for real-time audio denoising.
+   Modified:    No — used as-is from the npm distribution.
+
+   Original copyright notices:
+
+     Copyright 2021 8x8, Inc.
+     Licensed under the Apache License, Version 2.0
+
+   Historical notice (prior contribution under MIT):
+
+     Copyright (c) 2013 ESTOS GmbH
+     Copyright (c) 2013 BlueJimp SARL
+
+--------------------------------------------------------------------------
+
+Note: Void itself is licensed under the Business Source License 1.1
+(BSL-1.1). The use of Apache 2.0 licensed components does not change
+the license of the Void source code. Apache 2.0 is a permissive license
+that is fully compatible with redistribution under other licenses,
+provided the attribution requirements above are met.
+
+For the full Void license, see the LICENSE file at the root of this
+repository.
+

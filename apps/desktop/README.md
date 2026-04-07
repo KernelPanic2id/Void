@@ -13,7 +13,7 @@ graph TB
         CHAT["ChatContext<br/>Messages · localStorage persistence"]
         SERVER["ServerContext<br/>Servers & channels management"]
         TOAST["ToastContext<br/>Ephemeral notifications"]
-        BENTO["BentoLayoutContext<br/>Tauri-driven layout system"]
+        BENTO["BentoLayoutContext<br/>Tauri-driven panel layout system"]
     end
 
     subgraph "Hooks (State Logic)"

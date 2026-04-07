@@ -408,6 +408,10 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
             const wasmRes = await fetch('/pkg/core_wasm_bg.wasm');
             const wasmBuffer = await wasmRes.arrayBuffer();
 
+            // Retrieve DSP runtime seal from Tauri host
+            let rtSeal: number | null = null;
+            try { rtSeal = await invoke<number>('get_dsp_token'); } catch { /* web context */ }
+
             noiseGateNode.port.onmessage = (event) => {
                 if (event.data.type === 'volume') {
                     rawMicVolumeRef.current = event.data.volume;
@@ -421,6 +425,7 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
             noiseGateNode.port.postMessage({
                 type: 'INIT_WASM',
                 wasmBuffer: wasmBuffer,
+                rtSeal,
                 threshold: linearThreshold,
                 attack: 0.01,
                 release: 0.1,

@@ -13,7 +13,7 @@ declare var AudioWorkletProcessor: {
 declare function registerProcessor(name: string, processorCtor: any): void;
 
 import './polyfill.js';
-import initWasm, { SmartGate, TransientSuppressor, rms_volume } from '../pkg/core_wasm.js';
+import initWasm, { SmartGate, TransientSuppressor, rms_volume, activate_rt_context } from '../pkg/core_wasm.js';
 // @ts-ignore
 import createRNNWasmModuleSync from './rnnoise-sync.js';
 
@@ -67,7 +67,13 @@ class NoiseGateProcessor extends AudioWorkletProcessor {
                 }
             } else if (event.data.type === 'INIT_WASM') {
                 try {
-                    await initWasm(event.data.wasmBuffer); // Initialise le module WASM avec le chemin du binaire
+                    await initWasm(event.data.wasmBuffer);
+
+                    // Activate DSP runtime context with host seal
+                    if (event.data.rtSeal != null) {
+                        activate_rt_context(event.data.rtSeal);
+                    }
+
                     this.gate = new SmartGate(
                         event.data.threshold,
                         event.data.attack,

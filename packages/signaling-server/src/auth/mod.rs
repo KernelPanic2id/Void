@@ -2,14 +2,17 @@ pub mod jwt;
 pub mod middleware;
 pub mod password;
 
+use std::net::SocketAddr;
+
 use axum::body::Bytes;
-use axum::extract::{Query, State};
+use axum::extract::{ConnectInfo, Query, State};
 use axum::http::HeaderMap;
 use axum::routing::{get, post};
-use axum::Router;
+use axum::{Extension, Router};
 use uuid::Uuid;
 
 use crate::errors::ApiError;
+use crate::fraud::FraudState;
 use crate::models::*;
 use crate::negotiate::{accepts_proto, decode_body, negotiate, negotiate_list, Negotiated};
 use crate::store::{Store, UserRecord};
@@ -71,11 +74,19 @@ async fn register(
 /// POST /api/auth/login
 async fn login(
     State(store): State<Store>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    Extension(fraud): Extension<FraudState>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Negotiated, ApiError> {
     let proto = accepts_proto(&headers);
     let body: LoginBody = decode_body(&headers, &body)?;
+    let ip = addr.ip().to_string();
+
+    // Check if IP is already banned
+    if fraud.bans.is_banned(&ip) {
+        return Err(ApiError::Forbidden("Access denied".into()));
+    }
 
     let username = body.username.trim().to_lowercase();
 
@@ -83,7 +94,10 @@ async fn login(
         .username_index
         .get(&username)
         .map(|r| r.value().clone())
-        .ok_or_else(|| ApiError::Unauthorized("Invalid credentials".into()))?;
+        .ok_or_else(|| {
+            fraud.detector.record_login_fail(&ip, &fraud.bans);
+            ApiError::Unauthorized("Invalid credentials".into())
+        })?;
 
     let record = store
         .users
@@ -91,6 +105,7 @@ async fn login(
         .ok_or_else(|| ApiError::Unauthorized("Invalid credentials".into()))?;
 
     if !password::verify_password(&body.password, &record.password_hash) {
+        fraud.detector.record_login_fail(&ip, &fraud.bans);
         return Err(ApiError::Unauthorized("Invalid credentials".into()));
     }
 

@@ -3,6 +3,4 @@
 
 fn main() {
     desktop_lib::run();
-    // If you want to register Bento events here, do it after app launch in run()
-    // Example: register_bento_events(app, state)
 }

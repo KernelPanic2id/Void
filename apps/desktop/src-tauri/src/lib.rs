@@ -174,6 +174,17 @@ pub fn handle_resize(state: &LayoutState, payload: ResizePayload, app: &tauri::A
     Ok(())
 }
 
+// --- DSP RUNTIME SEAL ---
+
+#[tauri::command]
+fn get_dsp_token() -> u32 {
+    let mut h = crc32fast::Hasher::new();
+    h.update(b"v0id-rt-seal");
+    h.update(&0x564F_4944u32.to_le_bytes());
+    h.update(&0x5253_4543u32.to_le_bytes());
+    h.finalize()
+}
+
 #[tauri::command]
 async fn call_signaling(client: tauri::State<'_, reqwest::Client>, url: String) -> Result<String, String> {
     let res = if url.starts_with("http://") {
@@ -208,6 +219,7 @@ pub fn run() {
         .manage(LayoutState::default())
         .invoke_handler(tauri::generate_handler![
             call_signaling,
+            get_dsp_token,
             identity::create_identity,
             identity::find_identity_by_pubkey,
             identity::update_identity_pseudo,

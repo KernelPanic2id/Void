@@ -92,22 +92,113 @@ other recipients of the licensed work to be provided by Licensor:
 
 --------------------------------------------------------------------------
 
-NOTICE FRANCOPHONE / FRENCH NOTICE
+TRADUCTION FRANÇAISE / FRENCH TRANSLATION
 
-Ce projet est distribué sous la Business Source License 1.1 (BSL-1.1).
+Note juridique : en cas de divergence entre la présente traduction et le
+texte anglais ci-dessus, la version anglaise fait foi.
 
-Résumé (non contractuel — seul le texte anglais ci-dessus fait foi) :
+--------------------------------------------------------------------------
 
-- Vous pouvez librement copier, modifier, créer des œuvres dérivées et
-  redistribuer le Logiciel Licencié pour un usage NON COMMERCIAL.
-- Tout usage à des fins commerciales (avantage commercial ou compensation
-  monétaire) nécessite une licence commerciale distincte auprès du Concédant.
-- À compter de la Date de Changement (2031-04-07), ou au quatrième
-  anniversaire de la première distribution publique de cette version,
-  le Logiciel Licencié passe automatiquement sous licence
-  GNU General Public License v3.0 ou ultérieure (GPLv3+).
+Business Source License 1.1
 
-Pour toute question relative à des accords de licence alternatifs,
-veuillez contacter le Concédant (Raphael Taibi).
+Paramètres
 
+Concédant :               Raphael Taibi
+Logiciel Licencié :       Void
+                          Le Logiciel Licencié est (c) 2025 Raphael Taibi.
+Concession d'Usage
+Supplémentaire :          Vous pouvez utiliser le Logiciel Licencié, à
+                          condition de ne pas l'utiliser à des Fins
+                          Commerciales. Une « Fin Commerciale » désigne tout
+                          usage principalement destiné à ou orienté vers un
+                          avantage commercial ou une compensation monétaire.
+Date de Changement :      2031-04-07
+Licence de Changement :   GNU General Public License v3.0 ou ultérieure
 
+Pour toute information relative à des accords de licence alternatifs pour
+le Logiciel Licencié, veuillez contacter le Concédant.
+
+--------------------------------------------------------------------------
+
+Business Source License 1.1
+
+Texte de la licence copyright (c) 2017 MariaDB Corporation Ab.
+Tous droits réservés. « Business Source License » est une marque déposée
+de MariaDB Corporation Ab.
+
+Conditions
+
+Le Concédant vous accorde par la présente le droit de copier, modifier,
+créer des œuvres dérivées, redistribuer et faire un usage non productif du
+Logiciel Licencié. Le Concédant peut formuler une Concession d'Usage
+Supplémentaire, ci-dessus, autorisant un usage productif limité.
+
+À compter de la Date de Changement, ou du quatrième anniversaire de la
+première distribution publiquement accessible d'une version spécifique du
+Logiciel Licencié sous la présente Licence (la date la plus proche étant
+retenue), le Concédant vous accorde par la présente des droits selon les
+termes de la Licence de Changement, et les droits accordés dans le
+paragraphe précédent prennent fin.
+
+Si votre utilisation du Logiciel Licencié n'est pas conforme aux exigences
+actuellement en vigueur telles que décrites dans la présente Licence, vous
+devez acquérir une licence commerciale auprès du Concédant, de ses entités
+affiliées ou de ses revendeurs agréés, ou vous abstenir d'utiliser le
+Logiciel Licencié.
+
+Toutes les copies du Logiciel Licencié original et modifié, ainsi que les
+œuvres dérivées du Logiciel Licencié, sont soumises à la présente Licence.
+Cette Licence s'applique séparément à chaque version du Logiciel Licencié
+et la Date de Changement peut varier pour chaque version publiée par le
+Concédant.
+
+Vous devez afficher de manière visible la présente Licence sur chaque copie
+originale ou modifiée du Logiciel Licencié. Si vous recevez le Logiciel
+Licencié sous forme originale ou modifiée de la part d'un tiers, les
+termes et conditions énoncés dans la présente Licence s'appliquent à votre
+utilisation de ce logiciel.
+
+Tout usage du Logiciel Licencié en violation de la présente Licence
+entraînera automatiquement la résiliation de vos droits au titre de cette
+Licence pour la version actuelle et toutes les autres versions du Logiciel
+Licencié.
+
+La présente Licence ne vous accorde aucun droit sur les marques ou logos du
+Concédant ou de ses affiliés (sauf si vous êtes expressément tenu
+d'utiliser une marque ou un logo du Concédant en vertu de la présente
+Licence).
+
+DANS LA MESURE PERMISE PAR LA LOI APPLICABLE, LE LOGICIEL LICENCIÉ EST
+FOURNI « EN L'ÉTAT ». LE CONCÉDANT DÉCLINE PAR LA PRÉSENTE TOUTE GARANTIE
+ET CONDITION, EXPRESSE OU IMPLICITE, Y COMPRIS (SANS LIMITATION) LES
+GARANTIES DE QUALITÉ MARCHANDE, D'ADÉQUATION À UN USAGE PARTICULIER, DE
+NON-CONTREFAÇON ET DE TITRE.
+
+MariaDB accorde par la présente la permission d'utiliser le texte de cette
+Licence pour licencier vos propres logiciels, et d'y faire référence en
+utilisant la marque « Business Source License », à condition de respecter
+les Engagements du Concédant ci-dessous.
+
+Engagements du Concédant
+
+En contrepartie du droit d'utiliser le texte de cette Licence et le nom et
+la marque « Business Source License », le Concédant s'engage envers
+MariaDB, et envers tous les autres destinataires du logiciel licencié
+fourni par le Concédant :
+
+1. À spécifier comme Licence de Changement la GPL version 2.0 ou toute
+   version ultérieure, ou une licence compatible avec la GPL version 2.0 ou
+   une version ultérieure, où « compatible » signifie qu'un logiciel fourni
+   sous la Licence de Changement peut être inclus dans un programme avec un
+   logiciel fourni sous la GPL version 2.0 ou une version ultérieure. Le
+   Concédant peut spécifier des Licences de Changement supplémentaires sans
+   limitation.
+
+2. Soit : (a) spécifier une concession supplémentaire de droits d'usage
+   qui n'impose aucune restriction supplémentaire au droit accordé dans la
+   présente Licence, en tant que Concession d'Usage Supplémentaire ; soit
+   (b) insérer le texte « Aucune ».
+
+3. Spécifier une Date de Changement.
+
+4. Ne pas modifier la présente Licence de quelque autre manière que ce soit.

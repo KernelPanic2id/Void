@@ -87,7 +87,7 @@ Layout is persisted to `layout.json` in the app data directory.
 
 # Void — Backend Tauri (FR)
 
-Backend desktop en Rust utilisant **Tauri v2**. Gère l'identité locale, le certificate pinning TLS et le moteur de layout Bento.
+Backend desktop en Rust utilisant **Tauri v2**. Gère l'identité locale, le certificate pinning TLS et le moteur Bento Layout.
 
 ## Architecture
 
@@ -145,7 +145,7 @@ Le layout est persisté dans `layout.json` dans le répertoire de données de l'
 ├── identities/
 │   ├── <pubkey_hex>.secret    # Clé privée chiffrée (Argon2id)
 │   └── <pubkey_hex>.meta      # Métadonnées publiques (pseudo, avatar)
-└── layout.json                # Persistance du layout Bento
+└── layout.json                # Persistance du Bento layout
 ```
 
 ## Dépendances
