@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DiscordWASM",
+  "productName": "Void",
   "version": "0.2.1",
-  "identifier": "com.discord.app",
+  "identifier": "com.void.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Vocal WASM",
+        "title": "Void",
         "width": 1280,
         "height": 720,
         "decorations": false,
@@ -29,7 +29,7 @@
       "active": true,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCNzQ5MDk3QjkwRTg3REYKUldUZmh3NjVsNUIwUzRkSzRHYmNRWHhJakRuVm9JU2M4d29XVFkyYnlLUGtJMkord1MwV3RaUVIK",
       "endpoints": [
-        "https://github.com/RaphaelTaibi/discordWASM/releases/latest/download/latest.json"
+        "https://github.com/RaphaelTaibi/Void/releases/latest/download/latest.json"
       ],
       "dialog": true
     }
