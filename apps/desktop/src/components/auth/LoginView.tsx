@@ -51,7 +51,7 @@ export const LoginView = ({ onLogin, onRecover }: LoginViewProps) => {
     return (
         <div className="flex-1 w-full flex items-center justify-center p-4 relative overflow-hidden">
             <div className="w-full max-w-[460px] glass-modal rounded-2xl shadow-[0_8px_60px_rgba(0,0,0,0.6),0_0_40px_rgba(34,211,238,0.05)] p-10 flex flex-col items-center relative z-10">
-                <img src={logoAuth} alt="Vocal WASM" className="h-16 mb-1 object-contain" />
+                <img src={logoAuth} alt="Void" className="h-16 mb-1 object-contain" />
                 <p className="text-cyan-500/50 text-center mb-8 text-[13px] font-medium">
                     Identité anonyme chiffrée Ed25519
                 </p>

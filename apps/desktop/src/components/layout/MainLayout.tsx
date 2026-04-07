@@ -1,5 +1,5 @@
 /**
- * MainLayout handles the central panel and the floating sidebar (Discord-like layout).
+ * MainLayout handles the central panel and the floating sidebar.
  * Sidebar position/size is driven by Tauri/Rust via useBentoLayout.
  */
 import MainLayoutProps from "../../models/mainLayoutProps.model";

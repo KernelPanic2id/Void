@@ -138,7 +138,7 @@ const UserFooter = ({
                                 ) : (
                                     <div className="text-[14px] text-cyan-100/70" style={fontStyle}>
                                         <p className="leading-relaxed">
-                                            La transmission vocale et vidéo n'est pas complètement chiffrée de bout en bout pour le moment sur DiscordWASM. Notre protocole de signalisation est sécurisé, mais l'architecture serveur (SFU) nécessite de déchiffrer les flux média (DTLS/SRTP) en mémoire pour les redistribuer aux autres pairs.
+                                            La transmission vocale et vidéo n'est pas complètement chiffrée de bout en bout pour le moment sur Void. Notre protocole de signalisation est sécurisé, mais l'architecture serveur (SFU) nécessite de déchiffrer les flux média (DTLS/SRTP) en mémoire pour les redistribuer aux autres pairs.
                                         </p>
                                     </div>
                                 )}

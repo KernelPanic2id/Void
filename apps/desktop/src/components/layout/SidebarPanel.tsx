@@ -1,5 +1,5 @@
 /**
- * SidebarPanel is the floating/drag-resizable sidebar (Discord-like).
+ * SidebarPanel is the floating/drag-resizable sidebar.
  * Position/size driven by Tauri/Rust via props.
  */
 import React from "react";
