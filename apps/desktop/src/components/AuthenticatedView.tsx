@@ -1,4 +1,4 @@
-import { FC, useCallback, useEffect } from "react";
+import { FC, useCallback, useEffect, useState } from "react";
 import MainLayout from "./layout/MainLayout";
 import { ServerSidebar } from "./sidebar/ServerSidebar";
 import { ChannelList } from "./channel/ChannelList";
@@ -12,6 +12,8 @@ import { useVoiceActivity } from "../hooks/useVoiceActivity";
 import { useVoiceGrid } from "../hooks/useVoiceGrid";
 import { useStreamStore } from "../context/StreamContext";
 import { displayNameWithTag } from "../lib/identity-tag";
+import FriendsBar from "./friends/FriendsBar";
+import { useFriendsBar } from "../hooks/useFriendsBar";
 
 /**
  * Main authenticated view. Composes MainLayout with all panels.
@@ -22,6 +24,7 @@ const AuthenticatedView: FC = () => {
     const {
         isAuthenticated, username, userId, login, logout, recover,
         activeServer, activeChannelId, setActiveChannelId,
+        activeTextChannelId, setActiveTextChannelId,
         activeView, setActiveView,
         voice, createChannel, deleteChannel, deleteServer,
         isSettingsOpen, setIsSettingsOpen,
@@ -35,10 +38,14 @@ const AuthenticatedView: FC = () => {
         voice.isMuted,
     );
 
-    // Use voice.channelId when available, fall back to activeChannelId for immediate display
-    const _voiceChannelId = activeView === 'voice'
-        ? (voice.channelId ?? activeChannelId)
-        : voice.channelId;
+    /** Pending voice channel ID bridges the gap between click and mic init */
+    const [pendingVoiceId, setPendingVoiceId] = useState<string | null>(null);
+    useEffect(() => {
+        if (voice.channelId) setPendingVoiceId(null);
+    }, [voice.channelId]);
+
+    const _voiceChannelId = voice.channelId ?? pendingVoiceId;
+    const _isInVoice = _voiceChannelId !== null;
 
     const { stream: screenStream, isStreaming, startCapture, stopCapture } = useStreamStore();
 
@@ -57,7 +64,6 @@ const AuthenticatedView: FC = () => {
         isDeafened: voice.isDeafened,
     });
 
-
     /** Forward captured screen stream to the SFU peer connection */
     useEffect(() => {
         if (screenStream) voice.addScreenTrack(screenStream);
@@ -72,28 +78,42 @@ const AuthenticatedView: FC = () => {
         }
     }, [isStreaming, startCapture, stopCapture, voice]);
 
+    const friendsBar = useFriendsBar();
+
+    const handleLeaveVoice = useCallback(() => {
+        voice.leaveChannel();
+        setPendingVoiceId(null);
+        setActiveView('chat');
+    }, [voice, setActiveView]);
+
     if (!isAuthenticated) return <LoginView onLogin={login} onRecover={recover} />;
 
     const handleSelectChannel = (channelId: string) => {
         const _channel = activeServer?.channels.find(c => c.id === channelId);
         if (_channel?.type === 'text') {
-            setActiveView('chat');
+            const _next = activeTextChannelId === channelId ? null : channelId;
+            setActiveTextChannelId(_next);
+            setActiveChannelId(_next);
         } else {
             setActiveView('voice');
+            setActiveChannelId(channelId);
         }
-        setActiveChannelId(channelId);
     };
 
     const handleJoinVoice = (channelId: string) => {
-        if (username) voice.joinChannel(channelId, username);
+        if (username) {
+            setPendingVoiceId(channelId);
+            voice.joinChannel(channelId, username);
+        }
     };
+
 
     const sidebar = (
         <div className="flex flex-col h-full w-full overflow-hidden">
             {activeServer ? (
                 <ChannelList
                     server={activeServer}
-                    activeChannelId={activeChannelId}
+                    activeChannelId={activeTextChannelId ?? activeChannelId}
                     voiceChannelId={voice.channelId}
                     onSelectChannel={handleSelectChannel}
                     onJoinVoice={handleJoinVoice}
@@ -120,7 +140,7 @@ const AuthenticatedView: FC = () => {
     const sidebarFooter = (
         <UserFooter
             onLogout={logout}
-            onLeave={voice.leaveChannel}
+            onLeave={handleLeaveVoice}
             username={username && userId ? displayNameWithTag(username, userId) : "Utilisateur"}
             isConnected={voice.isConnected}
             isMuted={voice.isMuted}
@@ -140,32 +160,42 @@ const AuthenticatedView: FC = () => {
         />
     );
 
-    const _channelName = activeView === 'chat'
-        ? activeServer?.channels.find(c => c.id === activeChannelId)?.name ?? 'chat'
-        : activeServer?.channels.find(c => c.id === (voice.channelId ?? activeChannelId))?.name ?? 'vocal';
+    const _voiceChannelName = activeServer?.channels.find(c => c.id === _voiceChannelId)?.name ?? 'vocal';
+    const _textChannelName = activeServer?.channels.find(c => c.id === activeTextChannelId)?.name ?? 'chat';
 
     return (
         <main id="bento-area" className="flex-1 relative overflow-hidden h-full z-10">
-            <div className="absolute top-1 right-2 z-30">
-                <ServerSidebar />
-            </div>
+            <ServerSidebar />
+
+            <FriendsBar
+                friends={friendsBar.friends}
+                pending={friendsBar.pending}
+                onSendRequest={friendsBar.sendRequest}
+                onAccept={friendsBar.acceptRequest}
+                onReject={friendsBar.rejectRequest}
+                onRemove={friendsBar.removeFriend}
+            />
 
             <MainLayout
                 sidebar={sidebar}
                 sidebarFooter={sidebarFooter}
-                channelName={_channelName}
-                isInVoice={activeView === 'voice'}
+                channelName={_voiceChannelName}
+                isInVoice={_isInVoice}
             >
-                {activeView === 'chat' && <ChatPanel />}
-                {activeView === 'voice' && (
-                    <VoiceGrid
-                        tiles={tiles}
-                        spotlightUserId={spotlightUserId}
-                        onSpotlight={handleSpotlight}
-                        localUserId={voice.localUserId}
-                    />
-                )}
+                <VoiceGrid
+                    tiles={tiles}
+                    spotlightUserId={spotlightUserId}
+                    onSpotlight={handleSpotlight}
+                    localUserId={voice.localUserId}
+                />
             </MainLayout>
+
+            {activeTextChannelId && (
+                <ChatPanel
+                    channelName={_textChannelName}
+                    onClose={() => setActiveTextChannelId(null)}
+                />
+            )}
 
             <SettingsModal
                 isOpen={isSettingsOpen}

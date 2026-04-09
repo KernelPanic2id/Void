@@ -49,40 +49,62 @@ impl ServerCertVerifier for MyVerifier {
     fn supported_verify_schemes(&self) -> Vec<SignatureScheme> { vec![SignatureScheme::RSA_PSS_SHA256, SignatureScheme::ECDSA_NISTP256_SHA256, SignatureScheme::ED25519] }
 }
 
-// --- BENTO LAYOUT ENGINE ---
+// --- BENTO LAYOUT ENGINE (fraction-based: 0.0–1.0) ---
+
+const MARGIN_FRAC: f64 = 0.0;
+const MIN_W_PX: f64 = 150.0;
+const MIN_H_PX: f64 = 100.0;
+
+/// Per-panel minimum sizes in pixels. Compact panels (bars) need smaller minimums.
+fn min_sizes_for(id: &str) -> (f64, f64) {
+    match id {
+        "friends-bar" | "server-bar" => (48.0, 48.0),
+        _ => (MIN_W_PX, MIN_H_PX),
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LayoutWindow {
     pub id: String,
-    pub x: i32,
-    pub y: i32,
-    pub w: i32,
-    pub h: i32,
+    /// Horizontal position as fraction of container width (0.0–1.0)
+    pub x: f64,
+    /// Vertical position as fraction of container height (0.0–1.0)
+    pub y: f64,
+    /// Width as fraction of container width (0.0–1.0)
+    pub w: f64,
+    /// Height as fraction of container height (0.0–1.0)
+    pub h: f64,
     pub z: i32,
 }
 
 #[derive(Default)]
 pub struct LayoutState {
     pub windows: Mutex<HashMap<String, LayoutWindow>>,
-    pub margin: Mutex<i32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct MovePayload {
     pub id: String,
-    pub dx: i32,
-    pub dy: i32,
-    pub container_w: i32,
-    pub container_h: i32,
+    pub dx: f64,
+    pub dy: f64,
+    pub container_w: f64,
+    pub container_h: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ResizePayload {
     pub id: String,
-    pub dw: i32,
-    pub dh: i32,
-    pub container_w: i32,
-    pub container_h: i32,
+    pub dw: f64,
+    pub dh: f64,
+    pub container_w: f64,
+    pub container_h: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SwapPayload {
+    pub id: String,
+    pub container_w: f64,
+    pub container_h: f64,
 }
 
 #[derive(Serialize, Clone)]
@@ -120,34 +142,42 @@ fn load_layout_from_disk(app: &tauri::AppHandle) -> Option<HashMap<String, Layou
     serde_json::from_str(&data).ok()
 }
 
-/// Provides sensible default panel positions when no persisted layout exists.
+/// Provides sensible default panel positions as fractions of the container.
 fn default_layout() -> HashMap<String, LayoutWindow> {
     let mut map = HashMap::new();
-    map.insert("sidebar".into(), LayoutWindow { id: "sidebar".into(), x: 8, y: 48, w: 260, h: 600, z: 20 });
-    map.insert("channel-panel".into(), LayoutWindow { id: "channel-panel".into(), x: 280, y: 48, w: 500, h: 600, z: 10 });
-    map.insert("chat-panel".into(), LayoutWindow { id: "chat-panel".into(), x: 280, y: 48, w: 500, h: 600, z: 30 });
+    map.insert("sidebar".into(), LayoutWindow { id: "sidebar".into(), x: 0.0, y: 0.116, w: 0.156, h: 0.884, z: 20 });
+    map.insert("channel-panel".into(), LayoutWindow { id: "channel-panel".into(), x: 0.156, y: 0.121, w: 0.642, h: 0.879, z: 10 });
+    map.insert("chat-panel".into(), LayoutWindow { id: "chat-panel".into(), x: 0.797, y: 0.117, w: 0.203, h: 0.883, z: 30 });
+    map.insert("friends-bar".into(), LayoutWindow { id: "friends-bar".into(), x: 0.414, y: 0.005, w: 0.219, h: 0.048, z: 25 });
+    map.insert("server-bar".into(), LayoutWindow { id: "server-bar".into(), x: 0.001, y: 0.0, w: 0.113, h: 0.07, z: 0 });
     map
+}
+
+/// Detects legacy pixel-based layouts persisted before the fraction migration.
+fn is_legacy_pixel_layout(map: &HashMap<String, LayoutWindow>) -> bool {
+    map.values().any(|w| w.x > 2.0 || w.y > 2.0 || w.w > 2.0 || w.h > 2.0)
 }
 
 // --- HANDLERS ---
 
 pub fn handle_move(state: &LayoutState, payload: MovePayload, app: &tauri::AppHandle) -> Result<(), String> {
     let mut windows = state.windows.lock().map_err(|_| "Mutex Poisoned")?;
-    let margin = *state.margin.lock().map_err(|_| "Mutex Poisoned")?;
 
     let win = windows.entry(payload.id.clone()).or_insert(LayoutWindow {
-        id: payload.id.clone(), x: 100, y: 100, w: 240, h: 500, z: 0,
+        id: payload.id.clone(), x: 0.05, y: 0.07, w: 0.17, h: 0.56, z: 0,
     });
 
-    win.x += payload.dx;
-    win.y += payload.dy;
+    // Convert pixel deltas to fraction deltas
+    if payload.container_w > 0.0 && payload.container_h > 0.0 {
+        win.x += payload.dx / payload.container_w;
+        win.y += payload.dy / payload.container_h;
+    }
 
-    // Bornes calculées dynamiquement selon le conteneur JS
-    let max_x = payload.container_w - win.w - margin;
-    let max_y = payload.container_h - win.h - margin;
+    let max_x = (1.0 - win.w - MARGIN_FRAC).max(MARGIN_FRAC);
+    let max_y = (1.0 - win.h - MARGIN_FRAC).max(MARGIN_FRAC);
 
-    win.x = win.x.clamp(margin, max_x.max(margin));
-    win.y = win.y.clamp(margin, max_y.max(margin));
+    win.x = win.x.clamp(MARGIN_FRAC, max_x);
+    win.y = win.y.clamp(MARGIN_FRAC, max_y);
 
     sync_and_save(app, &windows);
     Ok(())
@@ -155,20 +185,55 @@ pub fn handle_move(state: &LayoutState, payload: MovePayload, app: &tauri::AppHa
 
 pub fn handle_resize(state: &LayoutState, payload: ResizePayload, app: &tauri::AppHandle) -> Result<(), String> {
     let mut windows = state.windows.lock().map_err(|_| "Mutex Poisoned")?;
-    let margin = *state.margin.lock().map_err(|_| "Mutex Poisoned")?;
 
     let win = windows.entry(payload.id.clone()).or_insert(LayoutWindow {
-        id: payload.id.clone(), x: 100, y: 100, w: 240, h: 500, z: 0,
+        id: payload.id.clone(), x: 0.05, y: 0.07, w: 0.17, h: 0.56, z: 0,
     });
 
-    win.w = (win.w + payload.dw).max(150);
-    win.h = (win.h + payload.dh).max(100);
+    if payload.container_w > 0.0 && payload.container_h > 0.0 {
+        win.w += payload.dw / payload.container_w;
+        win.h += payload.dh / payload.container_h;
+    }
 
-    let max_w = payload.container_w - win.x - margin;
-    let max_h = payload.container_h - win.y - margin;
+    let (mw_px, mh_px) = min_sizes_for(&payload.id);
+    let min_w = if payload.container_w > 0.0 { mw_px / payload.container_w } else { 0.03 };
+    let min_h = if payload.container_h > 0.0 { mh_px / payload.container_h } else { 0.03 };
 
-    win.w = win.w.clamp(150, max_w.max(150));
-    win.h = win.h.clamp(100, max_h.max(100));
+    let max_w = (1.0 - win.x - MARGIN_FRAC).max(min_w);
+    let max_h = (1.0 - win.y - MARGIN_FRAC).max(min_h);
+
+    win.w = win.w.clamp(min_w, max_w);
+    win.h = win.h.clamp(min_h, max_h);
+
+    sync_and_save(app, &windows);
+    Ok(())
+}
+
+/// Swaps width and height of a panel (pixel-aware fraction conversion).
+/// Used when toggling a panel between horizontal and vertical orientation.
+pub fn handle_swap(state: &LayoutState, payload: SwapPayload, app: &tauri::AppHandle) -> Result<(), String> {
+    let mut windows = state.windows.lock().map_err(|_| "Mutex Poisoned")?;
+
+    let win = windows.get_mut(&payload.id)
+        .ok_or("Window not found")?;
+
+    if payload.container_w <= 0.0 || payload.container_h <= 0.0 {
+        return Ok(());
+    }
+
+    // Convert fractions → pixels, swap, convert back
+    let w_px = win.w * payload.container_w;
+    let h_px = win.h * payload.container_h;
+    win.w = h_px / payload.container_w;
+    win.h = w_px / payload.container_h;
+
+    let (mw_px, mh_px) = min_sizes_for(&payload.id);
+    let min_w = mw_px / payload.container_w;
+    let min_h = mh_px / payload.container_h;
+    let max_w = (1.0 - win.x - MARGIN_FRAC).max(min_w);
+    let max_h = (1.0 - win.y - MARGIN_FRAC).max(min_h);
+    win.w = win.w.clamp(min_w, max_w);
+    win.h = win.h.clamp(min_h, max_h);
 
     sync_and_save(app, &windows);
     Ok(())
@@ -240,8 +305,10 @@ pub fn run() {
             let identity_cache = identity::init_cache(&handle);
             app.manage(identity_cache);
 
-            // Initialisation du layout depuis le disque (ou valeurs par défaut)
-            let initial = load_layout_from_disk(&handle).unwrap_or_else(default_layout);
+            // Load layout from disk, discard legacy pixel-based layouts
+            let initial = load_layout_from_disk(&handle)
+                .filter(|l| !is_legacy_pixel_layout(l))
+                .unwrap_or_else(default_layout);
             if let Ok(mut windows) = handle.state::<LayoutState>().windows.lock() {
                 *windows = initial;
                 let batch = LayoutBatch { windows: windows.values().cloned().collect() };
@@ -262,6 +329,14 @@ pub fn run() {
                 if let Ok(p) = serde_json::from_str::<ResizePayload>(event.payload()) {
                     let state = h_resize.state::<LayoutState>();
                     let _ = handle_resize(&state, p, &h_resize);
+                }
+            });
+
+            let h_swap = handle.clone();
+            app.listen_any("bento:layout:swap", move |event| {
+                if let Ok(p) = serde_json::from_str::<SwapPayload>(event.payload()) {
+                    let state = h_swap.state::<LayoutState>();
+                    let _ = handle_swap(&state, p, &h_swap);
                 }
             });
 

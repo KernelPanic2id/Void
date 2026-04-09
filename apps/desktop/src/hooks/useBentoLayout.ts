@@ -1,12 +1,14 @@
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useState } from "react";
 import { useBentoLayoutContext } from "../context/BentoLayoutContext";
 import { listen, emit } from "@tauri-apps/api/event";
 
-/** Default layout positions for each known panel. */
+/** Default layout positions as fractions (0.0–1.0). */
 const DEFAULTS: Record<string, { x: number; y: number; w: number; h: number }> = {
-  sidebar: { x: 8, y: 48, w: 260, h: 600 },
-  "channel-panel": { x: 280, y: 48, w: 500, h: 600 },
-  "chat-panel": { x: 280, y: 48, w: 500, h: 600 },
+  sidebar: { x: 0.0, y: 0.116, w: 0.156, h: 0.884 },
+  "channel-panel": { x: 0.156, y: 0.121, w: 0.642, h: 0.879 },
+  "chat-panel": { x: 0.797, y: 0.117, w: 0.203, h: 0.883 },
+  "friends-bar": { x: 0.414, y: 0.005, w: 0.219, h: 0.048 },
+  "server-bar": { x: 0.001, y: 0.0, w: 0.113, h: 0.07 },
 };
 
 /** Returns current bento container dimensions from the DOM. */
@@ -17,10 +19,32 @@ function getContainerSize() {
   return { container_w: Math.round(rect.width), container_h: Math.round(rect.height) };
 }
 
+/** Tracks the bento-area element size via ResizeObserver. */
+function useContainerSize() {
+  const [size, setSize] = useState(getContainerSize);
+
+  useEffect(() => {
+    const update = () => setSize(getContainerSize());
+    const el = document.getElementById("bento-area");
+    let observer: ResizeObserver | undefined;
+    if (el) {
+      observer = new ResizeObserver(update);
+      observer.observe(el);
+    }
+    window.addEventListener("resize", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      observer?.disconnect();
+    };
+  }, []);
+
+  return size;
+}
+
 export function useBentoLayout(windowId: string) {
   const { windows, updateBatch } = useBentoLayoutContext();
+  const { container_w, container_h } = useContainerSize();
 
-  // 1. ÉCOUTER les mises à jour de Rust
   useEffect(() => {
     let unlisten: any;
 
@@ -41,27 +65,31 @@ export function useBentoLayout(windowId: string) {
     };
   }, [updateBatch]);
 
-  // 2. TROUVER les données de cette fenêtre
   const layout = windows.find(w => w.id === windowId);
 
-  // 3. EMETTRE le mouvement vers Rust
   const emitMove = useCallback((delta: { dx: number; dy: number }) => {
     emit("bento:layout:move", { id: windowId, ...delta, ...getContainerSize() });
   }, [windowId]);
 
-  // 4. EMETTRE le resize vers Rust
   const emitResize = useCallback((delta: { dw: number; dh: number }) => {
     emit("bento:layout:resize", { id: windowId, ...delta, ...getContainerSize() });
   }, [windowId]);
 
-  const def = DEFAULTS[windowId] ?? { x: 100, y: 100, w: 240, h: 500 };
+  /** Swaps width and height (pixel-aware) for orientation toggles. */
+  const emitSwap = useCallback(() => {
+    emit("bento:layout:swap", { id: windowId, ...getContainerSize() });
+  }, [windowId]);
+
+  const def = DEFAULTS[windowId] ?? { x: 0.05, y: 0.07, w: 0.17, h: 0.56 };
+  const _frac = layout ?? def;
 
   return {
-    x: layout?.x ?? def.x,
-    y: layout?.y ?? def.y,
-    w: layout?.w ?? def.w,
-    h: layout?.h ?? def.h,
+    x: Math.round(_frac.x * container_w),
+    y: Math.round(_frac.y * container_h),
+    w: Math.round(_frac.w * container_w),
+    h: Math.round(_frac.h * container_h),
     onMove: emitMove,
     onResize: emitResize,
+    onSwap: emitSwap,
   };
 }

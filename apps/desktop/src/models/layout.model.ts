@@ -1,18 +1,18 @@
 /**
  * Layout model for Bento Tactile system.
- * Represents the position and size of a window/panel.
+ * Positions and sizes are stored as fractions (0.0–1.0) of the container.
  * @see Used for communication between React and Rust (Tauri)
  */
 export interface LayoutWindow {
   /** Unique identifier for the window/panel */
   id: string;
-  /** X coordinate (pixels) */
+  /** X position as fraction of container width (0.0–1.0) */
   x: number;
-  /** Y coordinate (pixels) */
+  /** Y position as fraction of container height (0.0–1.0) */
   y: number;
-  /** Width (pixels) */
+  /** Width as fraction of container width (0.0–1.0) */
   w: number;
-  /** Height (pixels) */
+  /** Height as fraction of container height (0.0–1.0) */
   h: number;
   /** Optional: z-index for stacking order */
   z?: number;

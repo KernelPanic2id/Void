@@ -17,6 +17,7 @@ export function useDashboardState() {
     const updater = useTauriUpdater();
     const [activeView, setActiveView] = useState<SidebarView>("chat");
     const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+    const [activeTextChannelId, setActiveTextChannelId] = useState<string | null>(null);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     useEffect(() => {
@@ -27,6 +28,7 @@ export function useDashboardState() {
 
     useEffect(() => {
         setActiveChannelId(null);
+        setActiveTextChannelId(null);
     }, [activeServerId]);
 
     const activeServer: Server | undefined = activeServerId
@@ -45,6 +47,8 @@ export function useDashboardState() {
         activeServer,
         activeChannelId,
         setActiveChannelId,
+        activeTextChannelId,
+        setActiveTextChannelId,
         activeView,
         setActiveView,
         voice,

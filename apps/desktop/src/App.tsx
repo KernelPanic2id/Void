@@ -4,6 +4,7 @@ import {VoiceProvider} from './context/VoiceContext';
 import {ChatProvider} from './context/ChatContext';
 import {ToastProvider} from './context/ToastContext';
 import {ServerProvider} from './context/ServerContext';
+import {FriendsProvider} from './context/FriendsContext';
 import {ToastContainer} from './components/ui/ToastContainer';
 import {TitleBar} from './components/layout/TitleBar';
 import AuthenticatedView from './components/AuthenticatedView';
@@ -28,20 +29,22 @@ export default function App() {
             <TitleBar />
             <AuthProvider>
                 <ToastProvider>
-                    <ServerProvider>
-                        <VoiceProvider>
-                            <ChatProvider>
-                                <StreamProvider>
-                                    <BentoLayoutProvider>
-                                        <div className="flex-1 flex relative overflow-hidden w-full h-full">
-                                            <AuthenticatedView />
-                                            <ToastContainer />
-                                        </div>
-                                    </BentoLayoutProvider>
-                                </StreamProvider>
-                            </ChatProvider>
-                        </VoiceProvider>
-                    </ServerProvider>
+                    <FriendsProvider>
+                        <ServerProvider>
+                            <VoiceProvider>
+                                <ChatProvider>
+                                    <StreamProvider>
+                                        <BentoLayoutProvider>
+                                            <div className="flex-1 flex relative overflow-hidden w-full h-full">
+                                                <AuthenticatedView />
+                                                <ToastContainer />
+                                            </div>
+                                        </BentoLayoutProvider>
+                                    </StreamProvider>
+                                </ChatProvider>
+                            </VoiceProvider>
+                        </ServerProvider>
+                    </FriendsProvider>
                 </ToastProvider>
             </AuthProvider>
         </div>

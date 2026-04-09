@@ -15,7 +15,7 @@ RUN chmod +x /usr/local/bin/signaling-server
 
 # Ports : 3001 (Signaling) et plage UDP (Audio WebRTC)
 EXPOSE 3001
-EXPOSE 10000-10100/udp
+EXPOSE 10000-20000/udp
 
 # Lancement du serveur
 CMD ["/usr/local/bin/signaling-server"]
