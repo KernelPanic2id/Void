@@ -1,5 +1,5 @@
 import { VoiceTile } from './VoiceTile';
-import VoiceGridProps from '../../models/voiceGridProps.model';
+import VoiceGridProps from '../../models/voice/voiceGridProps.model';
 
 /**
  * Distributes participant tiles proportionally.

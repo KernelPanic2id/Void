@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { apiFetch } from './http-client';
-import { Server } from '../models/server.model';
+import { Server } from '../models/server/server.model';
 
 /**
  * Signs a message with the local Ed25519 private key via Tauri.

@@ -1,6 +1,6 @@
 import { Headphones, Mic, MicOff, Settings, PhoneOff, LogOut, MonitorUp, MonitorOff } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import UserFooterProps from '../../models/userFooterProps.model';
+import UserFooterProps from '../../models/ui/userFooterProps.model';
 
 const NetworkIcon = ({ quality }: { quality: 0 | 1 | 2 | 3 }) => {
     const getColor = () => {

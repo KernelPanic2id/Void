@@ -1,6 +1,6 @@
 import { Headphones, Mic, MicOff, Settings, PhoneOff, LogOut } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import UserBarProps from '../../models/userBarProps.model';
+import UserBarProps from '../../models/ui/userBarProps.model';
 
 export const UserBar = ({
     username,

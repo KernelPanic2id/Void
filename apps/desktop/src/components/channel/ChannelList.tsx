@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { ChevronDown, Plus, Settings, Hash } from 'lucide-react';
-import { ServerChannel } from '../../models/server.model';
+import { ServerChannel } from '../../models/server/server.model';
 import { ChannelItem } from './ChannelItem';
 import { CreateChannelModal } from './CreateChannelModal';
 import { VoiceParticipantCard } from './VoiceParticipantCard';
 import { ServerSettingsModal } from '../ui/ServerSettingsModal';
-import ChannelListProps from '../../models/channelListProps.model';
+import ChannelListProps from '../../models/channel/channelListProps.model';
 
 /**
  * Displays the list of channels for a server with category headers.

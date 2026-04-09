@@ -1,4 +1,4 @@
-import Identity from '../models/identity.model';
+import Identity from '../models/auth/identity.model';
 
 /**
  * Maps a raw identity payload from the Rust backend (snake_case)

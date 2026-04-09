@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import UserContextMenuProps from '../../models/userContextMenuProps.model';
+import UserContextMenuProps from '../../models/ui/userContextMenuProps.model';
 
 export const UserContextMenu = ({ x, y, username, volume, onVolumeChange, onClose }: UserContextMenuProps) => {
     const menuRef = useRef<HTMLDivElement>(null);

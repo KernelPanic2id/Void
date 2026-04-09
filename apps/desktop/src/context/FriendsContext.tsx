@@ -1,6 +1,6 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
-import { UserSummary } from '../models/serverAuth.model';
-import { PendingRequest } from '../models/friend.model';
+import { UserSummary } from '../models/auth/serverAuth.model';
+import { PendingRequest } from '../models/social/friend.model';
 import {
     listFriends,
     listPending,

@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import * as jdenticon from 'jdenticon';
-import { AvatarProps } from '../../models/avatarProps.model';
+import { AvatarProps } from '../../models/auth/avatarProps.model';
 
 /**
  * Displays a user avatar or a deterministic identicon generated from the public key.

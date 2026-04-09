@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, Check, X } from 'lucide-react';
-import { PendingRequestsBadgeProps } from '../../models/friendsBarProps.model';
+import { PendingRequestsBadgeProps } from '../../models/social/friendsBarProps.model';
 
 /**
  * Badge showing pending friend requests count.

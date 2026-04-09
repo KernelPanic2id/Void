@@ -2,7 +2,7 @@
  * MainLayout handles the central panel and the floating sidebar.
  * Sidebar position/size is driven by Tauri/Rust via useBentoLayout.
  */
-import MainLayoutProps from "../../models/mainLayoutProps.model";
+import MainLayoutProps from "../../models/layout/mainLayoutProps.model";
 import ChannelPanel from "./ChannelPanel";
 import SidebarPanel from "./SidebarPanel";
 import { useBentoLayout } from "../../hooks/useBentoLayout";

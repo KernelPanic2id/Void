@@ -3,8 +3,8 @@ import { useAuth } from "../context/AuthContext";
 import { useServer } from "../context/ServerContext";
 import { useVoiceStore } from "../context/VoiceContext";
 import { useTauriUpdater } from "../lib/useTauriUpdater";
-import { SidebarView } from "../models/sidebarContentProps.model";
-import { Server } from "../models/server.model";
+import { SidebarView } from "../models/layout/sidebarContentProps.model";
+import { Server } from "../models/server/server.model";
 
 /**
  * Centralizes all dashboard business logic.

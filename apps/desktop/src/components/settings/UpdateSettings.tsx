@@ -1,7 +1,7 @@
 import { CheckCircle, Download, RefreshCw, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
-import { UpdateSettingsProps } from "../../models/updateSettingsProps.model";
+import { UpdateSettingsProps } from "../../models/ui/updateSettingsProps.model";
 
 export const UpdateSettings = ({ updateAvailable, updateStatus, triggerUpdate, checkForUpdate }: UpdateSettingsProps) => {
     const [appVersion, setAppVersion] = useState<string>('');

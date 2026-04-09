@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { ServerSignal } from '../types/serverSignal.type';
-import UseSfuConnectionProps from '../models/useSfuConnectionProps.model';
+import UseSfuConnectionProps from '../models/voice/useSfuConnectionProps.model';
 
 const ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },

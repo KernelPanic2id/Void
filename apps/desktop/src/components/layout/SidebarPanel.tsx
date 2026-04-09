@@ -3,7 +3,7 @@
  * Position/size driven by Tauri/Rust via props.
  */
 import React from "react";
-import SidebarPanelProps from "../../models/sidebarPanelProps.model";
+import SidebarPanelProps from "../../models/layout/sidebarPanelProps.model";
 import { useBentoDrag } from "../../hooks/useBentoDrag";
 import { useBentoResize } from "../../hooks/useBentoResize";
 import ResizeHandle from "./ResizeHandle";

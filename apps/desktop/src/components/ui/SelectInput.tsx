@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { ChevronDown } from "lucide-react";
-import { SelectInputProps } from "../../models/selectInput.model";
+import { SelectInputProps } from "../../models/ui/selectInput.model";
 
 /**
  * Custom styled select input matching the app's futuristic design system.

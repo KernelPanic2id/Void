@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FriendAvatarProps } from '../../models/friendsBarProps.model';
+import { FriendAvatarProps } from '../../models/social/friendsBarProps.model';
 
 /**
  * Single friend avatar circle with tooltip on hover.

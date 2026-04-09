@@ -1,5 +1,5 @@
 import VoiceState from './voiceState.model';
-import ChatMessage from './chatMessage.model';
+import ChatMessage from '../chat/chatMessage.model';
 
 export default interface ExtendedVoiceState extends VoiceState {
     networkQuality: 0 | 1 | 2 | 3;
@@ -7,6 +7,7 @@ export default interface ExtendedVoiceState extends VoiceState {
     chatMessages: ChatMessage[];
     bandwidthStats: Map<string, number>;
     sendChatMessage: (message: string) => void;
+    clearChatMessages: () => void;
     setUserInfo: (username: string, userId: string) => void;
     channelStartedAt?: number;
     smartGateEnabled: boolean;

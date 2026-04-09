@@ -7,7 +7,7 @@ import { useBentoLayout } from "../../hooks/useBentoLayout";
 import { useBentoDrag } from "../../hooks/useBentoDrag";
 import { useBentoResize } from "../../hooks/useBentoResize";
 import ResizeHandle from "./ResizeHandle";
-import ChannelPanelProps from "../../models/channelPanelProps.model";
+import ChannelPanelProps from "../../models/channel/channelPanelProps.model";
 
 const ChannelPanel: React.FC<ChannelPanelProps> = ({ channelName, isInVoice = false, children }) => {
     const { x, y, w, h, onMove, onResize } = useBentoLayout("channel-panel");

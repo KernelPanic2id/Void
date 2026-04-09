@@ -1,5 +1,5 @@
-import { Server, ServerChannel } from './server.model';
-import VoicePeer from './voicePeer.model';
+import { Server, ServerChannel } from '../server/server.model';
+import VoicePeer from '../voice/voicePeer.model';
 
 export default interface ChannelListProps {
     server: Server;

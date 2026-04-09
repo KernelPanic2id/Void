@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { UserPlus } from 'lucide-react';
-import { AddFriendPopoverProps } from '../../models/friendsBarProps.model';
+import { AddFriendPopoverProps } from '../../models/social/friendsBarProps.model';
 
 /**
  * Compact "+" button with a portal-rendered popover for sending friend requests.

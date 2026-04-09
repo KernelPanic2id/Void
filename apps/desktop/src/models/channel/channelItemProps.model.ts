@@ -1,4 +1,4 @@
-import { ServerChannel } from './server.model';
+import { ServerChannel } from '../server/server.model';
 
 export default interface ChannelItemProps {
   channel: ServerChannel;

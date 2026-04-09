@@ -8,8 +8,8 @@ import {
     decodeStatusResponse,
     decodeRemovedResponse,
 } from '../lib/wasm-codec';
-import { UserSummary } from '../models/serverAuth.model';
-import { FriendRequestResult, PendingRequest } from '../models/friend.model';
+import { UserSummary } from '../models/auth/serverAuth.model';
+import { FriendRequestResult, PendingRequest } from '../models/social/friend.model';
 
 /** GET /api/friends — accepted friends list. */
 export const listFriends = async (): Promise<UserSummary[]> => {

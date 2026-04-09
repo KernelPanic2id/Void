@@ -1,8 +1,8 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ClientSignalMessage } from '../types/clientSignal.type';
-import VoicePeer from '../models/voicePeer.model';
-import ChatMessage from '../models/chatMessage.model';
-import ExtendedVoiceState from '../models/extendedVoiceState.model';
+import VoicePeer from '../models/voice/voicePeer.model';
+import ChatMessage from '../models/chat/chatMessage.model';
+import ExtendedVoiceState from '../models/voice/extendedVoiceState.model';
 import initWasm from '../pkg/core_wasm';
 import { invoke } from '@tauri-apps/api/core';
 import WebSocket from '@tauri-apps/plugin-websocket';
@@ -178,6 +178,10 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         });
     }, [sendSignal]);
 
+    const clearChatMessages = useCallback(() => {
+        setChatMessages([]);
+    }, []);
+
     // ── Init & cleanup ───────────────────────────────────────────────
     useEffect(() => {
         initWasm().then(() => setWasmReady(true)).catch(() => setWasmReady(true));
@@ -196,7 +200,7 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         remoteStreams, remoteVideoStreams, addScreenTrack, removeScreenTrack,
         userVolumes, setUserVolume: (id: string, vol: number) => setUserVolumes(p => new Map(p).set(id, vol)),
         networkQuality, ping, averagePing, packetLoss,
-        chatMessages, sendChatMessage, setUserInfo,
+        chatMessages, sendChatMessage, clearChatMessages, setUserInfo,
         ...settings, isPttActive,
     }), [
         channelId, participants, isConnected, isMuted, isDeafened, error,
@@ -204,7 +208,7 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         joinChannel, leaveChannel, toggleMute, toggleDeafen,
         remoteStreams, remoteVideoStreams, addScreenTrack, removeScreenTrack,
         userVolumes, networkQuality, ping, averagePing, packetLoss,
-        chatMessages, sendChatMessage, setUserInfo, settings, isPttActive,
+        chatMessages, sendChatMessage, clearChatMessages, setUserInfo, settings, isPttActive,
     ]);
 
     return <VoiceContext.Provider value={value}>{children}</VoiceContext.Provider>;

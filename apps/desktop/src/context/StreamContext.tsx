@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import StreamState from "../models/streamState.model.ts";
-import StreamMetrics from "../models/streamMetrics.model.ts";
+import StreamState from "../models/stream/streamState.model.ts";
+import StreamMetrics from "../models/stream/streamMetrics.model.ts";
 import { AnalyzerWorkerOutgoingMessage } from '../types/analyzerWorkerMessage.type';
 
 import AnalyzerWorker from '../worker/analyzer.worker.ts?worker';

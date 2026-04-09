@@ -1,5 +1,5 @@
 import Toast from './toast.model';
-import { ToastType } from '../types/toastType.type';
+import { ToastType } from '../../types/toastType.type';
 
 export default interface ToastContextValue {
     toasts: Toast[];

@@ -13,7 +13,7 @@ import {
     UpdateProfilePayload,
     UserProfile,
     UserSummary,
-} from '../models/serverAuth.model';
+} from '../models/auth/serverAuth.model';
 
 /**
  * POST /api/auth/register

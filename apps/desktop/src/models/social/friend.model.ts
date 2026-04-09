@@ -1,4 +1,4 @@
-import { UserSummary } from './serverAuth.model';
+import { UserSummary } from '../auth/serverAuth.model';
 
 export interface PendingRequest {
     id: string;

@@ -1,4 +1,4 @@
-import VoicePeer from '../models/voicePeer.model';
+import VoicePeer from '../models/voice/voicePeer.model';
 
 export type ServerSignal =
     | { type: 'joined'; channelId: string; peers: VoicePeer[]; startedAt: number }

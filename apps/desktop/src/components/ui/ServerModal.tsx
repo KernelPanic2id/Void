@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useServer } from '../../context/ServerContext';
 import { Globe, Plus } from 'lucide-react';
 import { Modal } from './Modal';
-import ServerModalProps from '../../models/serverModalProps.model';
+import ServerModalProps from '../../models/server/serverModalProps.model';
 
 export const ServerModal = ({ isOpen, onClose }: ServerModalProps) => {
   const { createServer, joinServer } = useServer();

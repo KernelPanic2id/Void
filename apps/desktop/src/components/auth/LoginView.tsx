@@ -1,7 +1,7 @@
 // src/components/auth/LoginView.tsx
 import { useState } from 'react';
 import { Lock, UserPlus } from 'lucide-react';
-import LoginViewProps from '../../models/loginViewProps.model';
+import LoginViewProps from '../../models/auth/loginViewProps.model';
 import logoAuth from '../../assets/logo_auth.png';
 
 /**

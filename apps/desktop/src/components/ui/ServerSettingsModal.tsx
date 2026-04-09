@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Copy, Check, Key, Hash, Volume2, Video, Trash2, AlertTriangle } from 'lucide-react';
+import { Copy, Check, Key, Hash, Volume2, Trash2, AlertTriangle } from 'lucide-react';
 import { Modal } from './Modal';
-import ServerSettingsModalProps from '../../models/serverSettingsModalProps.model';
+import ServerSettingsModalProps from '../../models/server/serverSettingsModalProps.model';
 
 /**
  * Modal displaying server settings.
@@ -28,7 +28,6 @@ export const ServerSettingsModal = ({ isOpen, onClose, server, onDeleteChannel, 
 
   const _channelIcon = (type: string) => {
     if (type === 'voice') return <Volume2 size={14} className="text-cyan-500/60" />;
-    if (type === 'video') return <Video size={14} className="text-cyan-500/60" />;
     return <Hash size={14} className="text-cyan-500/60" />;
   };
 

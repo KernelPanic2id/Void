@@ -1,7 +1,7 @@
 import { Headphones, MicOff, Volume2 } from 'lucide-react';
 import { useState } from 'react';
 import { useVoiceStore } from '../../context/VoiceContext';
-import MembersPanelProps from '../../models/membersPanelProps.model';
+import MembersPanelProps from '../../models/server/membersPanelProps.model';
 import { UserContextMenu } from '../ui/UserContextMenu';
 import { identityTag } from '../../lib/identity-tag';
 

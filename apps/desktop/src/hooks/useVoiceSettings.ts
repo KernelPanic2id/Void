@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import UseVoiceSettingsProps from '../models/useVoiceSettingsProps.model';
+import UseVoiceSettingsProps from '../models/voice/useVoiceSettingsProps.model';
 
 /**
  * Manages all voice-related user settings persisted to localStorage.

@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useState, PropsWithChildren } from 'react';
-import { Server, ServerChannel } from '../models/server.model';
-import ServerContextProps from '../models/serverContext.model';
+import { Server, ServerChannel } from '../models/server/server.model';
+import ServerContextProps from '../models/server/serverContext.model';
 import { useAuth } from './AuthContext';
+import { useToast } from './ToastContext';
 import * as serverApi from '../api/server.api';
 
 const ServerContext = createContext<ServerContextProps | undefined>(undefined);
@@ -11,6 +12,7 @@ export const ServerProvider = ({ children }: PropsWithChildren) => {
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { publicKey, token } = useAuth();
+  const { addToast } = useToast();
 
   const fetchServers = useCallback(async () => {
     if (!token) {
@@ -38,10 +40,15 @@ export const ServerProvider = ({ children }: PropsWithChildren) => {
 
   const createServer = useCallback(async (name: string) => {
     if (!publicKey) return;
-    const _server = await serverApi.createServer(name, publicKey);
-    setServers(prev => [...prev, _server]);
-    setActiveServerId(_server.id);
-  }, [publicKey]);
+    try {
+      const _server = await serverApi.createServer(name, publicKey);
+      setServers(prev => [...prev, _server]);
+      setActiveServerId(_server.id);
+    } catch (err) {
+      console.error('Failed to create server:', err);
+      addToast(`Erreur création serveur : ${(err as Error).message}`, 'error');
+    }
+  }, [publicKey, addToast]);
 
   const deleteServer = useCallback(async (serverId: string) => {
     if (!publicKey) return;
@@ -61,14 +68,19 @@ export const ServerProvider = ({ children }: PropsWithChildren) => {
   }, [publicKey]);
 
   const createChannel = useCallback(async (serverId: string, channel: Omit<ServerChannel, 'id'>) => {
-    if (!publicKey) return;
+    if (!publicKey) {
+      addToast('Impossible de créer le salon : identité non disponible.', 'error');
+      return;
+    }
     try {
       const _updated = await serverApi.createChannel(serverId, channel.name, channel.type, publicKey);
       setServers(prev => prev.map(s => s.id === serverId ? _updated : s));
+      addToast(`Salon « ${channel.name} » créé`, 'success');
     } catch (err) {
       console.error('Failed to create channel:', err);
+      addToast(`Erreur création salon : ${(err as Error).message}`, 'error');
     }
-  }, [publicKey]);
+  }, [publicKey, addToast]);
 
   const deleteChannel = useCallback(async (serverId: string, channelId: string) => {
     if (!publicKey) return;

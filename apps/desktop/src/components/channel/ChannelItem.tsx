@@ -1,5 +1,5 @@
 import { Hash, Volume2 } from 'lucide-react';
-import ChannelItemProps from '../../models/channelItemProps.model';
+import ChannelItemProps from '../../models/channel/channelItemProps.model';
 
 /**
  * Reusable channel item displaying a channel with its type icon.

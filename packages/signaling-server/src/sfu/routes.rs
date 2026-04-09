@@ -102,10 +102,10 @@ pub fn router() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", post(create_server).get(list_servers))
         .route("/join-by-invite", post(join_by_invite))
-        .route("/{id}", get(get_server).delete(delete_server))
-        .route("/{id}/join", post(join_server))
-        .route("/{id}/channels", post(create_channel))
-        .route("/{id}/channels/{channel_id}", delete(delete_channel))
+        .route("/:id", get(get_server).delete(delete_server))
+        .route("/:id/join", post(join_server))
+        .route("/:id/channels", post(create_channel))
+        .route("/:id/channels/:channel_id", delete(delete_channel))
 }
 
 // ---------------------------------------------------------------------------

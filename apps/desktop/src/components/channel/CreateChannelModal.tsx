@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Hash, Volume2 } from 'lucide-react';
 import { Modal } from '../ui/Modal';
-import CreateChannelModalProps from '../../models/createChannelModalProps.model';
+import CreateChannelModalProps from '../../models/channel/createChannelModalProps.model';
 import { ChannelType } from '../../types/channelType.type';
 
 /**

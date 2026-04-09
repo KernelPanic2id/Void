@@ -1,5 +1,5 @@
 import { Send } from 'lucide-react';
-import ChatMessage from '../../models/chatMessage.model';
+import ChatMessage from '../../models/chat/chatMessage.model';
 
 const formatTime = (timestamp: number) =>
     new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });

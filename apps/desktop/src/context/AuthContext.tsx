@@ -1,7 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { AuthState } from '../models/authState.model';
-import Identity from '../models/identity.model';
+import { AuthState } from '../models/auth/authState.model';
+import Identity from '../models/auth/identity.model';
 import { formatUserTag } from '../lib/format-user-tag';
 import { mapIdentity } from '../lib/map-identity';
 import { registerAccount, loginAccount, getMe, updateMe } from '../api/auth.api';

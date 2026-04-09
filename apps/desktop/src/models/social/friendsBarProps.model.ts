@@ -1,4 +1,4 @@
-import { UserSummary } from './serverAuth.model';
+import { UserSummary } from '../auth/serverAuth.model';
 import { PendingRequest } from './friend.model';
 
 export interface FriendsBarProps {

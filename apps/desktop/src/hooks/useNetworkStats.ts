@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { process_network_stats } from '../pkg/core_wasm';
-import UseNetworkStatsProps from '../models/useNetworkStatsProps.model';
+import UseNetworkStatsProps from '../models/voice/useNetworkStatsProps.model';
 
 export const useNetworkStats = ({ pc, isConnected, wasmReady }: UseNetworkStatsProps) => {
     const [networkQuality, setNetworkQuality] = useState<0 | 1 | 2 | 3>(3);

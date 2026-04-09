@@ -6,7 +6,7 @@ import ResizeHandle from '../layout/ResizeHandle';
 import FriendAvatar from './FriendAvatar';
 import AddFriendPopover from './AddFriendPopover';
 import PendingRequestsBadge from './PendingRequestsBadge';
-import { FriendsBarProps } from '../../models/friendsBarProps.model';
+import { FriendsBarProps } from '../../models/social/friendsBarProps.model';
 
 /**
  * Floating friends bar panel driven by the Bento layout engine.

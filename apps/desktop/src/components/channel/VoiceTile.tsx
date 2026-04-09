@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { MicOff, Headphones, Eye, Camera } from 'lucide-react';
-import VoiceTileProps from '../../models/voiceTileProps.model';
+import VoiceTileProps from '../../models/voice/voiceTileProps.model';
 
 /**
  * Single participant tile in the voice grid.

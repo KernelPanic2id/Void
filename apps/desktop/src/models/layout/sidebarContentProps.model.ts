@@ -1,4 +1,4 @@
-import VoicePeer from './voicePeer.model';
+import VoicePeer from '../voice/voicePeer.model';
 
 export type SidebarView = 'voice' | 'chat';
 

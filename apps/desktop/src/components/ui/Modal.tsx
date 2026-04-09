@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
-import ModalProps from '../../models/modalProps.model';
+import ModalProps from '../../models/ui/modalProps.model';
 
 /**
  * Reusable glass-style modal shell rendered via a portal.

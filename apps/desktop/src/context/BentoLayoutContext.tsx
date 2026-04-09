@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
-import type { LayoutWindow, LayoutBatchUpdate, BentoLayoutContextValue } from "../models/layout.model";
+import type { LayoutWindow, LayoutBatchUpdate, BentoLayoutContextValue } from "../models/layout/layout.model";
 
 const BentoLayoutContext = createContext<BentoLayoutContextValue | undefined>(undefined);
 

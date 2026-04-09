@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import VoicePeer from '../models/voicePeer.model';
-import VoiceTileProps from '../models/voiceTileProps.model';
+import VoicePeer from '../models/voice/voicePeer.model';
+import VoiceTileProps from '../models/voice/voiceTileProps.model';
 
 /**
  * Builds tile data for the VoiceGrid by merging participant info,

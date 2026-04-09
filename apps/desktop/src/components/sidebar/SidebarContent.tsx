@@ -1,6 +1,6 @@
 import { Hash, Headphones, MicOff, Timer, Volume2, Plus } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import SidebarContentProps from '../../models/sidebarContentProps.model';
+import SidebarContentProps from '../../models/layout/sidebarContentProps.model';
 import { useVoiceStore } from '../../context/VoiceContext';
 import { UserContextMenu } from '../ui/UserContextMenu';
 

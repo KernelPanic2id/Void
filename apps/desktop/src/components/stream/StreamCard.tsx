@@ -1,6 +1,6 @@
 // src/components/stream/StreamCard.tsx
 import { useEffect, useRef, useState } from 'react';
-import  StreamCardProps  from '../../models/streamProps.model.ts';
+import  StreamCardProps  from '../../models/stream/streamProps.model.ts';
 
 export const StreamCard = ({ stream, username, isBright, isSpeaking }: StreamCardProps) => {
     const videoRef = useRef<HTMLVideoElement | null>(null);

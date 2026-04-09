@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import UseChannelManagerProps from '../models/useChannelManagerProps.model';
+import UseChannelManagerProps from '../models/voice/useChannelManagerProps.model';
 
 /**
  * Encapsulates join / leave channel logic including

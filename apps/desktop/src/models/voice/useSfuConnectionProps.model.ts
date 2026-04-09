@@ -1,6 +1,6 @@
 import { Dispatch, MutableRefObject, SetStateAction } from 'react';
 import VoicePeer from './voicePeer.model';
-import ChatMessage from './chatMessage.model';
+import ChatMessage from '../chat/chatMessage.model';
 
 export default interface UseSfuConnectionProps {
   sendSignal: (payload: any) => Promise<void>;

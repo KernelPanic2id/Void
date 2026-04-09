@@ -1,5 +1,6 @@
 import Identity from './identity.model';
 
+
 export interface AuthState {
     identity: Identity | null;
     username: string | null;

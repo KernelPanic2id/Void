@@ -6,7 +6,7 @@ import { useBentoLayout } from "../../hooks/useBentoLayout";
 import { useBentoDrag } from "../../hooks/useBentoDrag";
 import { useBentoResize } from "../../hooks/useBentoResize";
 import ResizeHandle from "../layout/ResizeHandle";
-import ChatPanelProps from "../../models/chatPanelProps.model";
+import ChatPanelProps from "../../models/chat/chatPanelProps.model";
 import { ChatMessageList } from "./ChatMessageList";
 
 const MAX_CHARACTERS = 300;

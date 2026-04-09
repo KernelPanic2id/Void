@@ -1,7 +1,7 @@
 import { X, User, Mic, Gamepad2, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { SettingsModalProps } from '../../models/settingsModalProps.model';
+import { SettingsModalProps } from '../../models/ui/settingsModalProps.model';
 import { ProfileSettings } from '../settings/ProfileSettings';
 import { VoiceVideoSettings } from '../settings/VoiceVideoSettings';
 import { ActivitySettings } from '../settings/ActivitySettings';

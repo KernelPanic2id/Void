@@ -1,5 +1,5 @@
 import { MicOff, Headphones } from 'lucide-react';
-import VoiceParticipantCardProps from '../../models/voiceParticipantCardProps.model';
+import VoiceParticipantCardProps from '../../models/voice/voiceParticipantCardProps.model';
 
 /**
  * Compact card for a voice participant displayed under the channel name in the sidebar.

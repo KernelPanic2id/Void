@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useVoiceStore } from "../../context/VoiceContext";
 import { SelectInput } from "../ui/SelectInput";
-import { SelectInputOption } from "../../models/selectInput.model";
+import { SelectInputOption } from "../../models/ui/selectInput.model";
 
 export const VoiceVideoSettings = () => {
     const { 
