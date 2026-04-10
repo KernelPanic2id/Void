@@ -8,6 +8,7 @@ import {
     acceptRequest as apiAccept,
     rejectRequest as apiReject,
     removeFriend as apiRemove,
+    removeFriendByUser as apiRemoveByUser,
 } from '../api/friends.api';
 import { useAuth } from './AuthContext';
 
@@ -20,6 +21,7 @@ interface FriendsContextValue {
     acceptRequest: (requestId: string) => Promise<void>;
     rejectRequest: (requestId: string) => Promise<void>;
     removeFriend: (friendshipId: string) => Promise<void>;
+    removeFriendByUser: (userId: string) => Promise<void>;
 }
 
 const FriendsContext = createContext<FriendsContextValue | undefined>(undefined);
@@ -50,6 +52,13 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
 
     useEffect(() => { refresh(); }, [refresh]);
 
+    // Poll for new incoming requests every 30s
+    useEffect(() => {
+        if (!token) return;
+        const _interval = setInterval(refresh, 30_000);
+        return () => clearInterval(_interval);
+    }, [token, refresh]);
+
     const sendRequest = useCallback(async (toUserId: string) => {
         await sendFriendRequest(toUserId);
         await refresh();
@@ -70,10 +79,15 @@ export const FriendsProvider = ({ children }: { children: ReactNode }) => {
         await refresh();
     }, [refresh]);
 
+    const removeFriendByUser = useCallback(async (userId: string) => {
+        await apiRemoveByUser(userId);
+        await refresh();
+    }, [refresh]);
+
     return (
         <FriendsContext.Provider value={{
             friends, pending, loading, refresh,
-            sendRequest, acceptRequest, rejectRequest, removeFriend,
+            sendRequest, acceptRequest, rejectRequest, removeFriend, removeFriendByUser,
         }}>
             {children}
         </FriendsContext.Provider>

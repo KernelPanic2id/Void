@@ -305,6 +305,7 @@ pub fn run() {
             let identity_cache = identity::init_cache(&handle);
             app.manage(identity_cache);
 
+
             // Load layout from disk, discard legacy pixel-based layouts
             let initial = load_layout_from_disk(&handle)
                 .filter(|l| !is_legacy_pixel_layout(l))

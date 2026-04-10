@@ -12,7 +12,7 @@ use tokio::sync::mpsc;
 use super::broadcast::{broadcast_to_channel, remove_peer, serialize_message};
 use super::models::{ClientMessage, PeerInfo, ServerMessage};
 use super::negotiation;
-use super::state::{AppState, ChannelState, PeerSession, RTCPStats, WS_CHANNEL_CAPACITY};
+use super::state::{AppState, ChannelState, ChatEntry, PeerSession, RTCPStats, WS_CHANNEL_CAPACITY, CHAT_HISTORY_CAP};
 use crate::fraud::FraudState;
 use crate::metrics::WS_QUEUE_DROPPED;
 
@@ -117,6 +117,27 @@ async fn handle_socket(
                 message,
                 timestamp,
             } => {
+                let entry = ChatEntry {
+                    id: format!("{}-{}", from, timestamp),
+                    channel_id: channel_id.clone(),
+                    from: from.clone(),
+                    username: username.clone(),
+                    message: message.clone(),
+                    timestamp,
+                };
+
+                // Persist in capped ring buffer
+                {
+                    let mut history = state.chat_history.write().await;
+                    let buf = history
+                        .entry(channel_id.clone())
+                        .or_insert_with(|| std::collections::VecDeque::with_capacity(CHAT_HISTORY_CAP));
+                    if buf.len() >= CHAT_HISTORY_CAP {
+                        buf.pop_front();
+                    }
+                    buf.push_back(entry);
+                }
+
                 broadcast_to_channel(
                     &state,
                     &channel_id,

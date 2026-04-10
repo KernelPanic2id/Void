@@ -146,7 +146,7 @@ export function useSfuConnection({
                     setChatMessages(prev => {
                         const id = `${msg.from}-${msg.timestamp}`;
                         if (prev.some(m => m.id === id)) return prev;
-                        return [...prev, { id, from: msg.from, username: msg.username, message: msg.message, timestamp: Number(msg.timestamp) }];
+                        return [...prev, { id, from: msg.from, username: msg.username, message: msg.message, timestamp: Number(msg.timestamp), channelId: msg.channelId }];
                     });
                     break;
                 case 'stats':

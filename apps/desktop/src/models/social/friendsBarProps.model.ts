@@ -14,6 +14,8 @@ export interface FriendAvatarProps {
     avatar: string | null;
     displayName: string;
     username: string;
+    publicKey: string | null;
+    onRemove?: () => void;
 }
 
 export interface AddFriendPopoverProps {

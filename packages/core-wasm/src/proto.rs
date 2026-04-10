@@ -36,6 +36,8 @@ pub struct UserSummary {
     pub display_name: String,
     #[prost(string, optional, tag = "4")]
     pub avatar: Option<String>,
+    #[prost(string, optional, tag = "5")]
+    pub public_key: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message, Serialize, Deserialize)]
@@ -118,6 +120,8 @@ pub struct LoginBody {
     pub username: String,
     #[prost(string, tag = "2")]
     pub password: String,
+    #[prost(string, optional, tag = "3")]
+    pub public_key: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message, Serialize, Deserialize)]

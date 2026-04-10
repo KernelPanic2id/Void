@@ -12,6 +12,7 @@ export interface UserSummary {
     username: string;
     displayName: string;
     avatar: string | null;
+    publicKey: string | null;
 }
 
 export interface AuthResponse {

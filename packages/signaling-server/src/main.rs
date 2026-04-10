@@ -52,11 +52,13 @@ async fn main() {
     store::spawn_flusher(auth_store.clone());
 
     let server_registry = ServerRegistry::load("servers.bin");
+    let server_registry_for_auth = server_registry.clone();
     sfu::registry::spawn_flusher(server_registry.clone());
 
     let app_state = Arc::new(AppState {
         peers: RwLock::new(HashMap::new()),
         channels: RwLock::new(HashMap::new()),
+        chat_history: RwLock::new(HashMap::new()),
         server_registry,
         api,
         auth_store: auth_store.clone(),
@@ -95,7 +97,12 @@ async fn main() {
         .route("/metrics", get(metrics::handler))
         .with_state(Arc::clone(&app_state))
         .nest("/api/servers", sfu::routes::router().with_state(app_state))
-        .nest("/api/auth", auth::router().with_state(auth_store.clone()))
+        .nest(
+            "/api/auth",
+            auth::router()
+                .with_state(auth_store.clone())
+                .layer(Extension(server_registry_for_auth)),
+        )
         .nest("/api/friends", friends::router().with_state(auth_store))
         .layer(Extension(fraud_state))
         .layer(CorsLayer::permissive());

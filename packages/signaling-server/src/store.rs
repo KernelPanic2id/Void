@@ -64,6 +64,8 @@ pub struct Store {
     pub users: Arc<DashMap<String, UserRecord>>,
     /// Secondary index: `username (lowercased)` → `user id`.
     pub username_index: Arc<DashMap<String, String>>,
+    /// Secondary index: `public_key` → `user id` for O(1) membership resolution.
+    pub pubkey_index: Arc<DashMap<String, String>>,
     pub friends: Arc<DashMap<String, FriendRecord>>,
     dirty: Arc<Notify>,
     path: Arc<String>,
@@ -72,10 +74,11 @@ pub struct Store {
 impl Store {
     /// Loads or creates the store from a `.bin` file.
     pub fn load(path: &str) -> Self {
-        let (users, username_index, friends) = Self::read_snapshot(path);
+        let (users, username_index, pubkey_index, friends) = Self::read_snapshot(path);
         Self {
             users,
             username_index,
+            pubkey_index,
             friends,
             dirty: Arc::new(Notify::new()),
             path: Arc::new(path.to_string()),
@@ -113,16 +116,21 @@ impl Store {
     ) -> (
         Arc<DashMap<String, UserRecord>>,
         Arc<DashMap<String, String>>,
+        Arc<DashMap<String, String>>,
         Arc<DashMap<String, FriendRecord>>,
     ) {
         let users = Arc::new(DashMap::new());
         let username_index = Arc::new(DashMap::new());
+        let pubkey_index = Arc::new(DashMap::new());
         let friends = Arc::new(DashMap::new());
 
         if let Ok(bytes) = std::fs::read(path) {
             if let Ok(snap) = StoreSnapshot::decode(bytes.as_slice()) {
                 for u in snap.users {
                     username_index.insert(u.username.to_lowercase(), u.id.clone());
+                    if let Some(ref pk) = u.public_key {
+                        pubkey_index.insert(pk.clone(), u.id.clone());
+                    }
                     users.insert(u.id.clone(), u);
                 }
                 for f in snap.friends {
@@ -136,7 +144,7 @@ impl Store {
             }
         }
 
-        (users, username_index, friends)
+        (users, username_index, pubkey_index, friends)
     }
 }
 

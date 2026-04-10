@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::Instant;
 
+use serde::Serialize;
 use tokio::sync::{RwLock, mpsc};
 use webrtc::api::API;
 use webrtc::peer_connection::RTCPeerConnection;
@@ -12,12 +13,11 @@ use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 use super::registry::ServerRegistry;
 use crate::store::Store;
 
-// ---------------------------------------------------------------------------
-// Bounded channel capacities
-// ---------------------------------------------------------------------------
-
 /// Max queued WebSocket JSON messages per peer before dropping.
 pub const WS_CHANNEL_CAPACITY: usize = 512;
+
+/// Max chat messages kept in-memory per channel.
+pub const CHAT_HISTORY_CAP: usize = 200;
 
 /// Max queued RTP packets per forwarder before dropping.
 pub const RTP_CHANNEL_CAPACITY: usize = 500;
@@ -138,6 +138,18 @@ impl RTCPStats {
 // Channel & Application state
 // ---------------------------------------------------------------------------
 
+/// Single persisted chat message kept in the in-memory ring buffer.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatEntry {
+    pub id: String,
+    pub channel_id: String,
+    pub from: String,
+    pub username: String,
+    pub message: String,
+    pub timestamp: u64,
+}
+
 /// Voice/video channel runtime state.
 pub struct ChannelState {
     pub members: HashSet<String>,
@@ -150,6 +162,8 @@ pub struct ChannelState {
 pub struct AppState {
     pub peers: RwLock<HashMap<String, PeerSession>>,
     pub channels: RwLock<HashMap<String, ChannelState>>,
+    /// In-memory chat history per channel_id, capped at [`CHAT_HISTORY_CAP`].
+    pub chat_history: RwLock<HashMap<String, VecDeque<ChatEntry>>>,
     pub server_registry: ServerRegistry,
     pub api: API,
     pub auth_store: Store,

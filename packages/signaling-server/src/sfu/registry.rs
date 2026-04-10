@@ -159,6 +159,15 @@ impl ServerRegistry {
         self.mark_dirty();
     }
 
+    /// Flushes the registry to disk **synchronously** (bypasses the debounced flusher).
+    /// Reserved for critical mutations (e.g. public-key migration) where data loss
+    /// on an immediate restart would cause permanent desync.
+    pub fn flush_sync(&self) {
+        if let Err(e) = self.flush() {
+            tracing::error!("Synchronous ServerRegistry flush failed: {e}");
+        }
+    }
+
     /// Adds a member to the secondary index for a given server.
     pub fn index_member(&self, member_pk: &str, server_id: &str) {
         let mut entry = self.member_index.entry(member_pk.to_string()).or_insert_with(Vec::new);

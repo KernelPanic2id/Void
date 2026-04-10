@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use super::crypto;
 use super::models::{Server, ServerChannel};
-use super::state::AppState;
+use super::state::{AppState, ChatEntry};
 use crate::auth::middleware::AuthUser;
 use crate::errors::ApiError;
 
@@ -89,9 +89,33 @@ impl ServerResponse {
 
 /// Resolves the caller's Ed25519 public key from the JWT in Authorization header.
 fn resolve_caller_public_key(state: &AppState, headers: &HeaderMap) -> Option<String> {
-    let auth_user = AuthUser::from_headers(headers).ok()?;
-    let record = state.auth_store.users.get(&auth_user.user_id)?;
-    record.public_key.clone()
+    let auth_user = match AuthUser::from_headers(headers) {
+        Ok(u) => u,
+        Err(e) => {
+            tracing::warn!("resolve_caller_public_key: JWT failed — {e:?}");
+            return None;
+        }
+    };
+
+    let record = match state.auth_store.users.get(&auth_user.user_id) {
+        Some(r) => r,
+        None => {
+            tracing::warn!(
+                "resolve_caller_public_key: user_id={} not found in auth_store",
+                auth_user.user_id
+            );
+            return None;
+        }
+    };
+
+    let pk = record.public_key.clone();
+    if pk.is_none() {
+        tracing::warn!(
+            "resolve_caller_public_key: user_id={} has no public_key stored",
+            auth_user.user_id
+        );
+    }
+    pk
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +130,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/:id/join", post(join_server))
         .route("/:id/channels", post(create_channel))
         .route("/:id/channels/:channel_id", delete(delete_channel))
+        .route("/:id/channels/:channel_id/messages", get(get_channel_messages))
 }
 
 // ---------------------------------------------------------------------------
@@ -135,11 +160,12 @@ async fn create_server(
 
     let id = Uuid::new_v4().to_string();
     let invite_key = Uuid::new_v4().to_string();
+    let owner_pk = body.owner_public_key;
 
     let server = Server {
         id: id.clone(),
         name,
-        owner_public_key: body.owner_public_key.clone(),
+        owner_public_key: owner_pk.clone(),
         invite_key,
         icon: None,
         channels: vec![
@@ -154,11 +180,12 @@ async fn create_server(
                 r#type: "voice".into(),
             },
         ],
-        members: vec![body.owner_public_key],
+        members: vec![owner_pk.clone()],
     };
 
     // Owner just created the server — reveal invite key
     let response = ServerResponse::from_server(&server, true);
+    state.server_registry.index_member(&owner_pk, &id);
     state.server_registry.servers.insert(id, server);
     state.server_registry.save();
 
@@ -166,32 +193,143 @@ async fn create_server(
 }
 
 /// GET /api/servers — lists servers where the authenticated user is a member.
-/// Invite key is only revealed when the caller is the server owner.
+/// Uses the `member_index` for O(1) lookup, falling back to a full scan
+/// if the index returns empty (self-healing against stale indexes).
+///
+/// **Orphaned ownership healing**: when a server's `owner_public_key` no longer
+/// maps to any user in the auth store (e.g. after data loss), ownership is
+/// automatically transferred to the authenticated caller if they are a member.
 async fn list_servers(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Json<Vec<ServerResponse>> {
     let caller_pk = resolve_caller_public_key(&state, &headers);
 
-    let servers: Vec<ServerResponse> = state
-        .server_registry
-        .servers
-        .iter()
-        .filter(|kv| {
-            caller_pk
-                .as_ref()
-                .map_or(false, |pk| kv.value().members.contains(pk))
-        })
-        .map(|kv| {
-            let s = kv.value();
-            let is_owner = caller_pk
-                .as_ref()
-                .map_or(false, |pk| *pk == s.owner_public_key);
-            ServerResponse::from_server(s, is_owner)
-        })
-        .collect();
+    let servers: Vec<ServerResponse> = match caller_pk {
+        Some(ref pk) => {
+            // Fast path: secondary index
+            let server_ids = state
+                .server_registry
+                .member_index
+                .get(pk)
+                .map(|entry| entry.value().clone())
+                .unwrap_or_default();
 
+            tracing::debug!(
+                "list_servers: pk={}… index returned {} server_id(s)",
+                &pk[..pk.len().min(12)],
+                server_ids.len()
+            );
+
+            let mut results: Vec<ServerResponse> = server_ids
+                .iter()
+                .filter_map(|sid| state.server_registry.servers.get(sid))
+                .map(|kv| {
+                    let s = kv.value();
+                    let is_owner = caller_pk.as_ref().map_or(false, |cpk| *cpk == s.owner_public_key);
+                    ServerResponse::from_server(s, is_owner)
+                })
+                .collect();
+
+            // Fallback: full scan if index returned nothing (stale index self-heal)
+            if results.is_empty() {
+                tracing::debug!("list_servers: index empty — running full scan");
+                results = state
+                    .server_registry
+                    .servers
+                    .iter()
+                    .filter(|kv| kv.value().members.contains(pk))
+                    .map(|kv| {
+                        let s = kv.value();
+                        // Rebuild index entry for this member
+                        state.server_registry.index_member(pk, &s.id);
+                        let is_owner = *pk == s.owner_public_key;
+                        ServerResponse::from_server(s, is_owner)
+                    })
+                    .collect();
+
+                if results.is_empty() {
+                    tracing::debug!(
+                        "list_servers: full scan also empty — no servers contain pk={}…",
+                        &pk[..pk.len().min(12)]
+                    );
+                }
+            }
+
+            // Orphaned ownership healing: transfer ownership when the original
+            // owner's public key no longer exists in the auth store.
+            heal_orphaned_ownership(&state, pk, &mut results);
+
+            results
+        }
+        None => {
+            tracing::debug!("list_servers: no caller_pk resolved — returning empty");
+            vec![]
+        }
+    };
+
+    tracing::debug!("list_servers: returning {} server(s)", servers.len());
     Json(servers)
+}
+
+/// Detects servers whose `owner_public_key` is absent from the auth store
+/// (orphaned after identity or auth-store data loss) and transfers ownership
+/// to the authenticated caller, who must already be a member.
+fn heal_orphaned_ownership(
+    state: &AppState,
+    caller_pk: &str,
+    results: &mut Vec<ServerResponse>,
+) {
+    let mut healed = false;
+
+    for resp in results.iter_mut() {
+        if resp.owner_public_key == caller_pk {
+            continue; // Already the owner
+        }
+
+        let owner_exists = state
+            .auth_store
+            .pubkey_index
+            .contains_key(&resp.owner_public_key);
+
+        if owner_exists {
+            continue; // Owner account still exists — no healing needed
+        }
+
+        tracing::warn!(
+            "heal_orphaned_ownership: server={} owner_pk={}… has no auth record — transferring to pk={}…",
+            resp.id,
+            &resp.owner_public_key[..resp.owner_public_key.len().min(12)],
+            &caller_pk[..caller_pk.len().min(12)],
+        );
+
+        // Update runtime state
+        if let Some(mut server) = state.server_registry.servers.get_mut(&resp.id) {
+            let old_pk = server.owner_public_key.clone();
+            server.owner_public_key = caller_pk.to_string();
+
+            // Also replace old pk in members list if still present
+            if let Some(pos) = server.members.iter().position(|m| m == &old_pk) {
+                if !server.members.contains(&caller_pk.to_string()) {
+                    server.members[pos] = caller_pk.to_string();
+                } else {
+                    server.members.remove(pos);
+                }
+            }
+        }
+
+        // Update response to reflect new ownership (reveal invite key)
+        resp.owner_public_key = caller_pk.to_string();
+        if let Some(server) = state.server_registry.servers.get(&resp.id) {
+            resp.invite_key = Some(server.invite_key.clone());
+        }
+
+        healed = true;
+    }
+
+    if healed {
+        state.server_registry.save();
+    }
 }
 
 /// GET /api/servers/:id — returns a single server.
@@ -275,7 +413,9 @@ async fn join_by_invite(
 
     let is_owner = server.owner_public_key == body.user_public_key;
     let response = ServerResponse::from_server(&server, is_owner);
+    let _pk = body.user_public_key.clone();
     drop(server);
+    state.server_registry.index_member(&_pk, &server_id);
     state.server_registry.save();
 
     Ok(Json(response))
@@ -303,7 +443,9 @@ async fn join_server(
 
     let is_owner = server.owner_public_key == body.user_public_key;
     let response = ServerResponse::from_server(&server, is_owner);
+    let _pk = body.user_public_key.clone();
     drop(server);
+    state.server_registry.index_member(&_pk, &id);
     state.server_registry.save();
 
     Ok(Json(response))
@@ -386,3 +528,17 @@ async fn delete_channel(
 
     Ok(Json(response))
 }
+
+/// GET /api/servers/:id/channels/:channel_id/messages — returns cached chat history.
+async fn get_channel_messages(
+    State(state): State<Arc<AppState>>,
+    Path((_id, channel_id)): Path<(String, String)>,
+) -> Json<Vec<ChatEntry>> {
+    let history = state.chat_history.read().await;
+    let entries = history
+        .get(&channel_id)
+        .map(|buf| buf.iter().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    Json(entries)
+}
+

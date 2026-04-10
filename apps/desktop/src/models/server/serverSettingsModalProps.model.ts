@@ -5,6 +5,6 @@ export default interface ServerSettingsModalProps {
   onClose: () => void;
   server: Server;
   onDeleteChannel?: (channelId: string) => void;
-  onDeleteServer?: () => void;
+  onDeleteServer?: () => Promise<void> | void;
 }
 

@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { apiFetch } from './http-client';
 import { Server } from '../models/server/server.model';
+import ChatMessage from '../models/chat/chatMessage.model';
 
 /**
  * Signs a message with the local Ed25519 private key via Tauri.
@@ -128,5 +129,17 @@ export async function deleteChannel(
         method: 'DELETE',
         body: JSON.stringify({ ownerPublicKey, timestamp, signature }),
     });
+}
+
+/**
+ * GET /api/servers/:id/channels/:channelId/messages — fetches cached chat history.
+ * @param serverId - Server UUID.
+ * @param channelId - Channel UUID.
+ */
+export async function fetchChannelMessages(
+    serverId: string,
+    channelId: string,
+): Promise<ChatMessage[]> {
+    return apiFetch<ChatMessage[]>(`/api/servers/${serverId}/channels/${channelId}/messages`);
 }
 

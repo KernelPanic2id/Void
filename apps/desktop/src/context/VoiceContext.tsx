@@ -6,6 +6,7 @@ import ExtendedVoiceState from '../models/voice/extendedVoiceState.model';
 import initWasm from '../pkg/core_wasm';
 import { invoke } from '@tauri-apps/api/core';
 import WebSocket from '@tauri-apps/plugin-websocket';
+import { useAuth } from './AuthContext';
 import { useToast } from './ToastContext';
 import { useNetworkStats } from '../hooks/useNetworkStats';
 import { usePushToTalk } from '../hooks/usePushToTalk';
@@ -32,13 +33,19 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [rawLocalStream, setRawLocalStream] = useState<MediaStream | null>(null);
     const [userVolumes, setUserVolumes] = useState<Map<string, number>>(new Map());
-    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>(() => {
+        try {
+            const _stored = localStorage.getItem('void_chat_messages');
+            return _stored ? JSON.parse(_stored) : [];
+        } catch { return []; }
+    });
     const [bandwidthStats, setBandwidthStats] = useState<Map<string, number>>(new Map());
     const [wasmReady, setWasmReady] = useState(false);
     const [localUserId, setLocalUserId] = useState<string>("");
     const [localUsername, setLocalUsername] = useState<string>("");
 
     const { addToast } = useToast();
+    const { username: authUsername } = useAuth();
     const fingerprintRef = useFingerprint(wasmReady);
 
     const socketRef = useRef<WebSocket | null>(null);
@@ -51,7 +58,7 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
     const signalQueueRef = useRef<ClientSignalMessage[]>([]);
 
     // ── Extracted hooks ──────────────────────────────────────────────
-    const settings = useVoiceSettings({ noiseGateNodeRef });
+    const settings = useVoiceSettings({ noiseGateNodeRef, username: authUsername });
 
     const { isPttActive, enforceTrackEnabled } = usePushToTalk({
         vadMode: settings.vadMode, pttKey: settings.pttKey,
@@ -103,6 +110,11 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
 
             await socket.addListener((msg) => {
                 if (msg.type === 'Text') handleMessage(msg.data);
+                if (msg.type === 'Close') {
+                    socketRef.current = null;
+                    setIsConnected(false);
+                    setTimeout(connectSocket, 3_000);
+                }
             });
 
             const _initialJoin: ClientSignalMessage = {
@@ -157,22 +169,23 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
         }
     }, [isDeafened, isMuted, sendSignal, enforceTrackEnabled]);
 
-    const sendChatMessage = useCallback((message: string) => {
+    const sendChatMessage = useCallback((message: string, targetChannelId?: string) => {
         if (!message.trim()) return;
         const _timestamp = Date.now();
         const _id = `${userIdRef.current}-${_timestamp}`;
+        const _channelId = targetChannelId || 'global-chat';
 
-        // Optimistic local display — server echo is deduped by matching ID
         setChatMessages(prev => [...prev, {
             id: _id,
             from: userIdRef.current,
             username: usernameRef.current,
             message: message.trim(),
             timestamp: _timestamp,
+            channelId: _channelId,
         }]);
 
         sendSignal({
-            type: 'chat', channelId: 'global-chat',
+            type: 'chat', channelId: _channelId,
             from: userIdRef.current, username: usernameRef.current,
             message: message.trim(), timestamp: _timestamp,
         });
@@ -180,7 +193,16 @@ export const VoiceProvider = ({ children }: { children: ReactNode }) => {
 
     const clearChatMessages = useCallback(() => {
         setChatMessages([]);
+        localStorage.removeItem('void_chat_messages');
     }, []);
+
+    // Persist chat messages to localStorage (capped at 200)
+    useEffect(() => {
+        try {
+            const _limited = chatMessages.slice(-200);
+            localStorage.setItem('void_chat_messages', JSON.stringify(_limited));
+        } catch { /* storage full or unavailable */ }
+    }, [chatMessages]);
 
     // ── Init & cleanup ───────────────────────────────────────────────
     useEffect(() => {

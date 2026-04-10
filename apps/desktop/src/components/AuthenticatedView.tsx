@@ -14,6 +14,7 @@ import { useStreamStore } from "../context/StreamContext";
 import { displayNameWithTag } from "../lib/identity-tag";
 import FriendsBar from "./friends/FriendsBar";
 import { useFriendsBar } from "../hooks/useFriendsBar";
+import { useChatStore } from "../context/ChatContext";
 
 /**
  * Main authenticated view. Composes MainLayout with all panels.
@@ -25,7 +26,7 @@ const AuthenticatedView: FC = () => {
         isAuthenticated, username, userId, login, logout, recover,
         activeServer, activeChannelId, setActiveChannelId,
         activeTextChannelId, setActiveTextChannelId,
-        activeView, setActiveView,
+        setActiveView,
         voice, createChannel, deleteChannel, deleteServer,
         isSettingsOpen, setIsSettingsOpen,
         updater, isOwner,
@@ -79,6 +80,12 @@ const AuthenticatedView: FC = () => {
     }, [isStreaming, startCapture, stopCapture, voice]);
 
     const friendsBar = useFriendsBar();
+    const { setActiveChannelId: setChatChannelId } = useChatStore();
+
+    // Sync active text channel into ChatContext
+    useEffect(() => {
+        setChatChannelId(activeTextChannelId);
+    }, [activeTextChannelId, setChatChannelId]);
 
     const handleLeaveVoice = useCallback(() => {
         voice.leaveChannel();

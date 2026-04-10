@@ -65,3 +65,14 @@ export const removeFriend = async (friendshipId: string): Promise<{ removed: boo
     const res = await apiFetchProto(`/api/friends/${friendshipId}`, { method: 'DELETE' });
     return decodeRemovedResponse(res) as { removed: boolean };
 };
+
+/**
+ * DELETE /api/friends/by-user/:userId — removes friendship with a given user.
+ * @param userId - Target user's server-side UUID.
+ */
+export const removeFriendByUser = async (userId: string): Promise<{ removed: boolean }> => {
+    await ensureWasm();
+    const res = await apiFetchProto(`/api/friends/by-user/${userId}`, { method: 'DELETE' });
+    return decodeRemovedResponse(res) as { removed: boolean };
+};
+

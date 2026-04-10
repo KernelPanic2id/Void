@@ -9,7 +9,7 @@ import { useAuth } from "../context/AuthContext";
  */
 export function useProfileSettings() {
     const { voiceAvatar, setVoiceAvatar } = useVoiceStore();
-    const { username, publicKey, userTag, avatar, logout, updateUsername, updateAvatar } = useAuth();
+    const { username, publicKey, userTag, logout, updateUsername, updateAvatar } = useAuth();
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [nameInputValue, setNameInputValue] = useState(username || '');
@@ -22,12 +22,6 @@ export function useProfileSettings() {
         setNameInputValue(username || '');
     }, [username]);
 
-    // Sync persisted avatar into VoiceStore on mount
-    useEffect(() => {
-        if (avatar && !voiceAvatar) {
-            setVoiceAvatar(avatar);
-        }
-    }, [avatar]);
 
     const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];

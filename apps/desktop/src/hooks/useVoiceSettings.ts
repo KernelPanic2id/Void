@@ -5,7 +5,8 @@ import UseVoiceSettingsProps from '../models/voice/useVoiceSettingsProps.model';
  * Manages all voice-related user settings persisted to localStorage.
  * Keeps the noise-gate worklet in sync with threshold / auto mode changes.
  */
-export function useVoiceSettings({ noiseGateNodeRef }: UseVoiceSettingsProps) {
+export function useVoiceSettings({ noiseGateNodeRef, username }: UseVoiceSettingsProps) {
+
     const [smartGateEnabled, setSmartGateEnabled] = useState(true);
     const [vadAuto, setVadAuto] = useState(() => localStorage.getItem('vadAuto') !== 'false');
     const [vadThreshold, setVadThreshold] = useState(() => Number(localStorage.getItem('vadThreshold')) || 0.13);
@@ -17,7 +18,36 @@ export function useVoiceSettings({ noiseGateNodeRef }: UseVoiceSettingsProps) {
     const [webrtcNoiseSuppressionEnabled, setWebrtcNoiseSuppressionEnabled] = useState(
         () => localStorage.getItem('webrtcNoiseSuppression') !== 'false',
     );
-    const [voiceAvatar, setVoiceAvatar] = useState<string | null>(() => localStorage.getItem('voiceAvatar') || null);
+
+    const [voiceAvatar, setVoiceAvatar] = useState<string | null>(() => {
+        if (!username) return null;
+        return localStorage.getItem(`voiceAvatar_${username}`) || null;
+    });
+
+    // Flag to skip the persist effect right after a username-triggered load
+    const skipPersistRef = useRef(false);
+
+    // One-time cleanup: purge legacy key and corrupted scoped keys from migration bug
+    useEffect(() => {
+        localStorage.removeItem('voiceAvatar');
+        if (!localStorage.getItem('_va_clean_v1')) {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+                const _key = localStorage.key(i);
+                if (_key?.startsWith('voiceAvatar_')) localStorage.removeItem(_key);
+            }
+            localStorage.setItem('_va_clean_v1', '1');
+        }
+    }, []);
+
+    // Reload the correct avatar when the active user changes
+    useEffect(() => {
+        skipPersistRef.current = true;
+        if (username) {
+            setVoiceAvatar(localStorage.getItem(`voiceAvatar_${username}`) || null);
+        } else {
+            setVoiceAvatar(null);
+        }
+    }, [username]);
 
     // Persist settings to localStorage
     useEffect(() => { localStorage.setItem('selectedMic', selectedMic); }, [selectedMic]);
@@ -28,9 +58,14 @@ export function useVoiceSettings({ noiseGateNodeRef }: UseVoiceSettingsProps) {
     useEffect(() => { localStorage.setItem('vadMode', vadMode); }, [vadMode]);
     useEffect(() => { localStorage.setItem('pttKey', pttKey); }, [pttKey]);
     useEffect(() => {
-        if (voiceAvatar) localStorage.setItem('voiceAvatar', voiceAvatar);
-        else localStorage.removeItem('voiceAvatar');
-    }, [voiceAvatar]);
+        if (skipPersistRef.current) {
+            skipPersistRef.current = false;
+            return;
+        }
+        if (!username) return;
+        if (voiceAvatar) localStorage.setItem(`voiceAvatar_${username}`, voiceAvatar);
+        else localStorage.removeItem(`voiceAvatar_${username}`);
+    }, [voiceAvatar, username]);
 
     // Forward threshold changes to the noise-gate worklet
     useEffect(() => {

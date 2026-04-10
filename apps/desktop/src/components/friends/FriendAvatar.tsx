@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { FriendAvatarProps } from '../../models/social/friendsBarProps.model';
+import { formatUserTag } from '../../lib/format-user-tag';
 
 /**
  * Single friend avatar circle with tooltip on hover.
- * Displays the user's avatar image or a letter fallback.
+ * Displays tag (Pseudo#XXXX) in tooltip when publicKey is available.
  */
-const FriendAvatar = ({ avatar, displayName, username }: FriendAvatarProps) => {
+const FriendAvatar = ({ avatar, displayName, publicKey }: FriendAvatarProps) => {
     const [showTooltip, setShowTooltip] = useState(false);
     const _initial = displayName.charAt(0).toUpperCase();
+    const _tag = publicKey ? formatUserTag(displayName, publicKey) : displayName;
 
     return (
         <div
@@ -26,15 +28,13 @@ const FriendAvatar = ({ avatar, displayName, username }: FriendAvatarProps) => {
                 )}
             </div>
 
-            {/* Tooltip */}
             {showTooltip && (
                 <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5
                     glass-heavy rounded-lg border border-white/6 shadow-xl
                     text-[11px] text-cyan-100 font-medium whitespace-nowrap pointer-events-none
                     animate-in fade-in zoom-in-95 duration-150"
                 >
-                    <div className="font-bold">{displayName}</div>
-                    <div className="text-cyan-500/50 text-[10px]">@{username}</div>
+                    <div className="font-bold">{_tag}</div>
                 </div>
             )}
         </div>
@@ -42,4 +42,3 @@ const FriendAvatar = ({ avatar, displayName, username }: FriendAvatarProps) => {
 };
 
 export default FriendAvatar;
-

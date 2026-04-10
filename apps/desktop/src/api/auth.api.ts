@@ -38,13 +38,15 @@ export const registerAccount = async (
  * POST /api/auth/login
  * @param username - Login name.
  * @param password - Cleartext password.
+ * @param publicKey - Optional Ed25519 public key to sync with the server record.
  */
 export const loginAccount = async (
     username: string,
     password: string,
+    publicKey?: string | null,
 ): Promise<AuthResponse> => {
     await ensureWasm();
-    const bytes = encodeLoginBody({ username, password });
+    const bytes = encodeLoginBody({ username, password, publicKey: publicKey ?? undefined });
     const res = await apiFetchProto('/api/auth/login', { method: 'POST', body: bytes });
     return decodeAuthResponse(res) as AuthResponse;
 };

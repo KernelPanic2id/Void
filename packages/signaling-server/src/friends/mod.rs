@@ -20,6 +20,7 @@ pub fn router() -> Router<Store> {
         .route("/:id/accept", post(accept_request))
         .route("/:id/reject", post(reject_request))
         .route("/:id", delete(remove_friend))
+        .route("/by-user/:user_id", delete(remove_friend_by_user))
 }
 
 /// GET /api/friends — accepted friends list
@@ -183,6 +184,30 @@ async fn remove_friend(
         return Err(ApiError::BadRequest("Not your friendship".into()));
     }
     drop(record);
+
+    store.friends.remove(&id);
+    store.mark_dirty();
+    Ok(negotiate(RemovedResponse { removed: true }, proto))
+}
+
+/// DELETE /api/friends/by-user/:user_id — removes friendship with a given user.
+async fn remove_friend_by_user(
+    State(store): State<Store>,
+    headers: HeaderMap,
+    Path(target_user_id): Path<String>,
+) -> Result<Negotiated, ApiError> {
+    let proto = accepts_proto(&headers);
+    let auth = AuthUser::from_headers(&headers)?;
+
+    let _entry = store.friends.iter().find(|r| {
+        let f = r.value();
+        (f.from_user_id == auth.user_id && f.to_user_id == target_user_id)
+            || (f.from_user_id == target_user_id && f.to_user_id == auth.user_id)
+    });
+
+    let id = _entry
+        .map(|e| e.value().id.clone())
+        .ok_or_else(|| ApiError::NotFound("Friendship not found".into()))?;
 
     store.friends.remove(&id);
     store.mark_dirty();

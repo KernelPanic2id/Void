@@ -15,28 +15,35 @@ export const ServerProvider = ({ children }: PropsWithChildren) => {
   const { addToast } = useToast();
 
   const fetchServers = useCallback(async () => {
-    if (!token) {
+    if (!token || !publicKey) {
+      console.debug('[ServerContext] fetchServers skipped — token:', !!token, 'publicKey:', !!publicKey);
       setServers([]);
       return;
     }
     setLoading(true);
     try {
       const _list = await serverApi.listServers();
+      console.debug('[ServerContext] fetchServers returned', _list.length, 'server(s)');
+      _list.forEach(s => console.debug(
+        '  →', s.name, 'ownerPk:', s.ownerPublicKey?.slice(0, 16) + '…',
+        'hasInviteKey:', !!s.inviteKey,
+      ));
       setServers(_list);
     } catch (err) {
-      console.error('Failed to fetch servers:', err);
+      console.error('[ServerContext] fetchServers failed:', err);
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, publicKey]);
 
-  // Re-fetch whenever the auth token changes (login / logout / session restore)
   useEffect(() => { fetchServers(); }, [fetchServers]);
 
-  // Reset selection on logout
   useEffect(() => {
-    if (!token) setActiveServerId(null);
-  }, [token]);
+    if (!token || !publicKey) {
+      setServers([]);
+      setActiveServerId(null);
+    }
+  }, [token, publicKey]);
 
   const createServer = useCallback(async (name: string) => {
     if (!publicKey) return;
@@ -52,10 +59,16 @@ export const ServerProvider = ({ children }: PropsWithChildren) => {
 
   const deleteServer = useCallback(async (serverId: string) => {
     if (!publicKey) return;
-    await serverApi.deleteServer(serverId, publicKey);
-    setServers(prev => prev.filter(s => s.id !== serverId));
-    if (activeServerId === serverId) setActiveServerId(null);
-  }, [publicKey, activeServerId]);
+    try {
+      await serverApi.deleteServer(serverId, publicKey);
+      setServers(prev => prev.filter(s => s.id !== serverId));
+      if (activeServerId === serverId) setActiveServerId(null);
+      addToast('Serveur supprimé', 'success');
+    } catch (err) {
+      console.error('[ServerContext] deleteServer failed:', err);
+      addToast(`Erreur suppression serveur : ${(err as Error).message}`, 'error');
+    }
+  }, [publicKey, activeServerId, addToast]);
 
   const joinServer = useCallback(async (inviteKey: string) => {
     if (!publicKey) return;
@@ -89,9 +102,19 @@ export const ServerProvider = ({ children }: PropsWithChildren) => {
   }, [publicKey]);
 
   const isOwner = useCallback((serverId: string) => {
-    if (!publicKey) return false;
+    if (!publicKey) {
+      console.debug('[ServerContext] isOwner: no publicKey');
+      return false;
+    }
     const _server = servers.find(s => s.id === serverId);
-    return _server?.ownerPublicKey === publicKey;
+    const _result = _server?.ownerPublicKey === publicKey;
+    console.debug(
+      '[ServerContext] isOwner check — serverId:', serverId,
+      'ownerPk:', _server?.ownerPublicKey?.slice(0, 16) + '…',
+      'myPk:', publicKey?.slice(0, 16) + '…',
+      'match:', _result,
+    );
+    return _result;
   }, [publicKey, servers]);
 
   return (

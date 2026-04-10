@@ -1,34 +1,77 @@
-import { createContext, ReactNode, useContext, useEffect, useRef } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useVoiceStore } from './VoiceContext';
 import { useServer } from './ServerContext';
 import ChatContextValue from '../models/chat/chatContextValue.model';
+import ChatMessage from '../models/chat/chatMessage.model';
+import { fetchChannelMessages } from '../api/server.api';
 
 const ChatContext = createContext<ChatContextValue | undefined>(undefined);
 
 /**
- * Thin chat context that forwards socket messages from VoiceContext.
- * Clears message history automatically when the active server changes.
+ * Channel-aware chat context. Loads history from the server when
+ * the active text channel changes and forwards WebSocket messages.
  */
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
-    const { chatMessages, sendChatMessage, clearChatMessages } = useVoiceStore();
+    const { chatMessages: wsChatMessages, sendChatMessage: wsSend, clearChatMessages } = useVoiceStore();
     const { activeServerId } = useServer();
-    const _prevServerRef = useRef<string | null>(activeServerId);
+    const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+    const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>([]);
+    const _prevChannelRef = useRef<string | null>(null);
 
-    // Flush messages when the active server changes
-    useEffect(() => {
-        if (_prevServerRef.current !== activeServerId) {
-            clearChatMessages();
-            _prevServerRef.current = activeServerId;
+    /** Fetches persisted chat history from the signaling server. */
+    const loadHistory = useCallback(async (serverId: string, channelId: string) => {
+        try {
+            const _messages = await fetchChannelMessages(serverId, channelId);
+            setHistoryMessages(_messages);
+        } catch {
+            setHistoryMessages([]);
         }
-    }, [activeServerId, clearChatMessages]);
-
-    // One-time cleanup of legacy localStorage key
-    useEffect(() => {
-        localStorage.removeItem('chat_history_main');
     }, []);
 
+    // Reload history when active channel or server changes
+    useEffect(() => {
+        if (activeChannelId && activeServerId && activeChannelId !== _prevChannelRef.current) {
+            clearChatMessages();
+            loadHistory(activeServerId, activeChannelId);
+        }
+        if (!activeChannelId) {
+            setHistoryMessages([]);
+        }
+        _prevChannelRef.current = activeChannelId;
+    }, [activeChannelId, activeServerId, loadHistory, clearChatMessages]);
+
+    // Reset on server switch
+    useEffect(() => {
+        setActiveChannelId(null);
+        setHistoryMessages([]);
+        clearChatMessages();
+    }, [activeServerId, clearChatMessages]);
+
+    // Merge history + live WS messages for the active channel, dedupe by id
+    const chatMessages = (() => {
+        const _map = new Map<string, ChatMessage>();
+        for (const m of historyMessages) _map.set(m.id, m);
+        for (const m of wsChatMessages) {
+            if (m.channelId === activeChannelId) _map.set(m.id, m);
+        }
+        return Array.from(_map.values()).sort((a, b) => a.timestamp - b.timestamp);
+    })();
+
+    /** Sends a message to the currently active text channel. */
+    const sendChatMessage = useCallback((message: string) => {
+        if (!activeChannelId) return;
+        wsSend(message, activeChannelId);
+    }, [activeChannelId, wsSend]);
+
     return (
-        <ChatContext.Provider value={{ chatMessages, sendChatMessage, clearHistory: clearChatMessages }}>
+        <ChatContext.Provider value={{
+            chatMessages,
+            sendChatMessage,
+            clearHistory: clearChatMessages,
+            loadHistory,
+            activeChannelId,
+            setActiveChannelId,
+        }}>
             {children}
         </ChatContext.Provider>
     );

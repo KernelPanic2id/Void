@@ -6,7 +6,7 @@ export default interface ExtendedVoiceState extends VoiceState {
     ping: number;
     chatMessages: ChatMessage[];
     bandwidthStats: Map<string, number>;
-    sendChatMessage: (message: string) => void;
+    sendChatMessage: (message: string, channelId?: string) => void;
     clearChatMessages: () => void;
     setUserInfo: (username: string, userId: string) => void;
     channelStartedAt?: number;
