@@ -16,18 +16,12 @@ export const ServerProvider = ({ children }: PropsWithChildren) => {
 
   const fetchServers = useCallback(async () => {
     if (!token || !publicKey) {
-      console.debug('[ServerContext] fetchServers skipped — token:', !!token, 'publicKey:', !!publicKey);
       setServers([]);
       return;
     }
     setLoading(true);
     try {
       const _list = await serverApi.listServers();
-      console.debug('[ServerContext] fetchServers returned', _list.length, 'server(s)');
-      _list.forEach(s => console.debug(
-        '  →', s.name, 'ownerPk:', s.ownerPublicKey?.slice(0, 16) + '…',
-        'hasInviteKey:', !!s.inviteKey,
-      ));
       setServers(_list);
     } catch (err) {
       console.error('[ServerContext] fetchServers failed:', err);
@@ -102,19 +96,9 @@ export const ServerProvider = ({ children }: PropsWithChildren) => {
   }, [publicKey]);
 
   const isOwner = useCallback((serverId: string) => {
-    if (!publicKey) {
-      console.debug('[ServerContext] isOwner: no publicKey');
-      return false;
-    }
+    if (!publicKey) return false;
     const _server = servers.find(s => s.id === serverId);
-    const _result = _server?.ownerPublicKey === publicKey;
-    console.debug(
-      '[ServerContext] isOwner check — serverId:', serverId,
-      'ownerPk:', _server?.ownerPublicKey?.slice(0, 16) + '…',
-      'myPk:', publicKey?.slice(0, 16) + '…',
-      'match:', _result,
-    );
-    return _result;
+    return _server?.ownerPublicKey === publicKey;
   }, [publicKey, servers]);
 
   return (

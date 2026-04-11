@@ -23,4 +23,3 @@ export const config = {
   env: isDev ? 'development' : 'production',
 } as const;
 
-export type AppConfig = typeof config;

@@ -23,5 +23,6 @@ export interface AuthResponse {
 export interface UpdateProfilePayload {
     displayName?: string;
     avatar?: string;
+    publicKey?: string;
 }
 

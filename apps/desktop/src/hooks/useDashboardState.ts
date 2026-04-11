@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 import { useServer } from "../context/ServerContext";
 import { useVoiceStore } from "../context/VoiceContext";
 import { useTauriUpdater } from "../lib/useTauriUpdater";
-import { SidebarView } from "../models/layout/sidebarContentProps.model";
+import { SidebarView } from "../types/sidebarView.type";
 import { Server } from "../models/server/server.model";
 
 /**

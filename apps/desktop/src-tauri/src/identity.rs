@@ -89,12 +89,38 @@ fn get_legacy_path(app: &tauri::AppHandle) -> PathBuf {
 }
 
 // ---------------------------------------------------------------------------
-// Atomic write (write-then-rename)
+// Atomic write (write-then-rename) with backup rotation
 // ---------------------------------------------------------------------------
+
+/// Creates a `.bak` copy of `path` before any write, if the file has content.
+fn rotate_backup(path: &PathBuf) {
+    if !path.exists() {
+        return;
+    }
+    if let Ok(meta) = fs::metadata(path) {
+        if meta.len() == 0 {
+            return;
+        }
+    }
+    let bak = path.with_extension("json.bak");
+    let _ = fs::copy(path, bak);
+}
 
 /// Writes `content` to `path` atomically via a temporary file.
 /// On Windows the target is removed first since `fs::rename` cannot overwrite.
+/// A `.bak` copy of the previous file is kept for crash recovery.
 fn atomic_write(path: &PathBuf, content: &str) -> Result<(), String> {
+    // Safety: refuse to write empty or near-empty content over a non-empty file
+    if content.len() <= 2 {
+        if let Ok(existing) = fs::metadata(path) {
+            if existing.len() > 2 {
+                return Err("Refusing to overwrite non-empty file with empty content".into());
+            }
+        }
+    }
+
+    rotate_backup(path);
+
     let tmp = path.with_extension("tmp");
     fs::write(&tmp, content).map_err(|e| format!("tmp write failed: {e}"))?;
 
@@ -108,12 +134,33 @@ fn atomic_write(path: &PathBuf, content: &str) -> Result<(), String> {
 // Disk I/O (low-level)
 // ---------------------------------------------------------------------------
 
+/// Reads identity metadata from disk, falling back to `.bak` on failure.
 fn read_metas_from_disk(app: &tauri::AppHandle) -> Vec<IdentityMeta> {
     let path = get_meta_path(app);
-    fs::read_to_string(path)
+
+    // Primary read
+    if let Some(metas) = fs::read_to_string(&path)
         .ok()
+        .filter(|d| d.len() > 2)
         .and_then(|d| serde_json::from_str(&d).ok())
-        .unwrap_or_default()
+    {
+        return metas;
+    }
+
+    // Fallback: try .bak file
+    let bak = path.with_extension("json.bak");
+    if let Some(metas) = fs::read_to_string(&bak)
+        .ok()
+        .filter(|d| d.len() > 2)
+        .and_then(|d| serde_json::from_str::<Vec<IdentityMeta>>(&d).ok())
+    {
+        eprintln!("Recovered {} identities from backup file", metas.len());
+        // Restore the primary file from backup
+        let _ = fs::copy(&bak, &path);
+        return metas;
+    }
+
+    Vec::new()
 }
 
 fn flush_cache_to_disk(app: &tauri::AppHandle, cache: &HashMap<String, IdentityMeta>) -> Result<(), String> {
@@ -122,12 +169,31 @@ fn flush_cache_to_disk(app: &tauri::AppHandle, cache: &HashMap<String, IdentityM
     atomic_write(&get_meta_path(app), &json)
 }
 
+/// Reads secrets from disk, falling back to `.bak` on failure.
 fn read_secrets(app: &tauri::AppHandle) -> Vec<IdentitySecret> {
     let path = get_secrets_path(app);
-    fs::read_to_string(path)
+
+    if let Some(secrets) = fs::read_to_string(&path)
         .ok()
+        .filter(|d| d.len() > 2)
         .and_then(|d| serde_json::from_str(&d).ok())
-        .unwrap_or_default()
+    {
+        return secrets;
+    }
+
+    // Fallback: try .bak file
+    let bak = path.with_extension("json.bak");
+    if let Some(secrets) = fs::read_to_string(&bak)
+        .ok()
+        .filter(|d| d.len() > 2)
+        .and_then(|d| serde_json::from_str::<Vec<IdentitySecret>>(&d).ok())
+    {
+        eprintln!("Recovered {} secrets from backup file", secrets.len());
+        let _ = fs::copy(&bak, &path);
+        return secrets;
+    }
+
+    Vec::new()
 }
 
 fn write_secrets(app: &tauri::AppHandle, secrets: &[IdentitySecret]) -> Result<(), String> {
@@ -161,7 +227,7 @@ fn verify_password(password: &str, stored_hash: &str) -> Result<bool, String> {
 // ---------------------------------------------------------------------------
 
 /// Builds an `IdentityCache` from disk, running legacy migration first if needed.
-/// Always re-flushes to normalize the schema (e.g. newly added fields).
+/// Only re-flushes to normalize the schema when identities were actually loaded.
 pub fn init_cache(app: &tauri::AppHandle) -> IdentityCache {
     if let Err(e) = migrate_legacy(app) {
         eprintln!("Identity migration warning: {e}");
@@ -173,9 +239,11 @@ pub fn init_cache(app: &tauri::AppHandle) -> IdentityCache {
         .map(|m| (m.public_key.clone(), m))
         .collect();
 
-    // Re-flush to ensure all fields are present on disk
-    if let Err(e) = flush_cache_to_disk(app, &map) {
-        eprintln!("Schema normalization flush failed: {e}");
+    // Re-flush to normalize schema, but only when there are identities to persist
+    if !map.is_empty() {
+        if let Err(e) = flush_cache_to_disk(app, &map) {
+            eprintln!("Schema normalization flush failed: {e}");
+        }
     }
 
     IdentityCache(Mutex::new(map))

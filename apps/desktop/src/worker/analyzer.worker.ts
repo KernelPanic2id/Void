@@ -1,11 +1,5 @@
 import init, { analyze_frame } from "../pkg/core_wasm";
-
-type AnalyzerWorkerIncomingMessage = {
-    type: 'ANALYZE';
-    imageData: ArrayBuffer;
-    width: number;
-    height: number;
-};
+import { AnalyzerWorkerIncomingMessage } from '../types/analyzerWorkerMessage.type';
 
 let wasmReady = false;
 

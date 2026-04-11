@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { UserSummary } from '../models/auth/serverAuth.model';
 import { PendingRequest } from '../models/social/friend.model';
+import FriendsContextValue from '../models/social/friendsContextValue.model';
 import {
     listFriends,
     listPending,
@@ -12,17 +13,6 @@ import {
 } from '../api/friends.api';
 import { useAuth } from './AuthContext';
 
-interface FriendsContextValue {
-    friends: UserSummary[];
-    pending: PendingRequest[];
-    loading: boolean;
-    refresh: () => Promise<void>;
-    sendRequest: (toUserId: string) => Promise<void>;
-    acceptRequest: (requestId: string) => Promise<void>;
-    rejectRequest: (requestId: string) => Promise<void>;
-    removeFriend: (friendshipId: string) => Promise<void>;
-    removeFriendByUser: (userId: string) => Promise<void>;
-}
 
 const FriendsContext = createContext<FriendsContextValue | undefined>(undefined);
 

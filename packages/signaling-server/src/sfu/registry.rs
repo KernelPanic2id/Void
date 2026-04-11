@@ -109,19 +109,17 @@ pub struct ServerRegistry {
     pub servers: Arc<DashMap<String, Server>>,
     /// Secondary index: `member_public_key` → list of `server_id`.
     pub member_index: Arc<DashMap<String, Vec<String>>>,
-    dirty: Arc<Notify>,
-    path: Arc<String>,
+    pub(crate) dirty: Arc<Notify>,
+    pub(crate) path: Arc<String>,
 }
 
 impl ServerRegistry {
-    /// Loads from a `.bin` file, falling back to legacy `servers.json` for migration.
+    /// Loads the registry from a protobuf `.bin` file.
     pub fn load(path: &str) -> Self {
         let servers = Arc::new(DashMap::new());
         let member_index = Arc::new(DashMap::new());
 
-        let loaded = Self::try_load_bin(path)
-            .or_else(|| Self::try_load_legacy_json())
-            .unwrap_or_default();
+        let loaded = Self::try_load_bin(path).unwrap_or_default();
 
         for s in &loaded {
             for member_pk in &s.members {
@@ -140,10 +138,6 @@ impl ServerRegistry {
             path: Arc::new(path.to_string()),
         };
 
-        if !loaded.is_empty() && !Path::new(path).exists() {
-            tracing::info!("Migrating legacy servers.json → {path}");
-            let _ = registry.flush();
-        }
 
         tracing::info!("ServerRegistry loaded ({} servers)", registry.servers.len());
         registry
@@ -206,18 +200,10 @@ impl ServerRegistry {
         Ok(())
     }
 
-    fn try_load_bin(path: &str) -> Option<Vec<Server>> {
+    pub(crate) fn try_load_bin(path: &str) -> Option<Vec<Server>> {
         let bytes = std::fs::read(path).ok()?;
         let snap = ServerSnapshot::decode(bytes.as_slice()).ok()?;
         Some(snap.servers.iter().map(Server::from).collect())
-    }
-
-    /// One-shot migration: reads the old JSON file if present.
-    fn try_load_legacy_json() -> Option<Vec<Server>> {
-        let contents = std::fs::read_to_string("servers.json").ok()?;
-        let servers: Vec<Server> = serde_json::from_str(&contents).ok()?;
-        tracing::info!("Read {} servers from legacy servers.json", servers.len());
-        Some(servers)
     }
 }
 

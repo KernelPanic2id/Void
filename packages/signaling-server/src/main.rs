@@ -5,8 +5,12 @@ mod friends;
 mod metrics;
 mod models;
 mod negotiate;
+mod nonce;
 mod sfu;
 mod store;
+
+#[cfg(test)]
+mod tests;
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -91,10 +95,14 @@ async fn main() {
         detector: fraud_detector,
     };
 
+    let nonce_store = nonce::NonceStore::new();
+    nonce::spawn_cleanup(nonce_store.clone());
+
     let app: Router<()> = Router::new()
         .route("/ws", get(ws_handler))
         .route("/health", get(|| async { "Healthy" }))
         .route("/metrics", get(metrics::handler))
+        .route("/api/auth/nonce", get(nonce::get_nonce))
         .with_state(Arc::clone(&app_state))
         .nest("/api/servers", sfu::routes::router().with_state(app_state))
         .nest(
@@ -105,6 +113,7 @@ async fn main() {
         )
         .nest("/api/friends", friends::router().with_state(auth_store))
         .layer(Extension(fraud_state))
+        .layer(Extension(nonce_store))
         .layer(CorsLayer::permissive());
 
     let addr: SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();

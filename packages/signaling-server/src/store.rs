@@ -18,8 +18,10 @@ pub struct UserRecord {
     pub username: String,
     #[prost(string, tag = "3")]
     pub display_name: String,
-    #[prost(string, tag = "4")]
-    pub password_hash: String,
+    // tag 4: legacy password_hash — kept optional for backward-compatible deserialization.
+    // New records leave this empty; auth is Ed25519 nonce-challenge only.
+    #[prost(string, optional, tag = "4")]
+    pub password_hash: Option<String>,
     #[prost(string, optional, tag = "5")]
     pub avatar: Option<String>,
     #[prost(string, optional, tag = "6")]
@@ -67,8 +69,8 @@ pub struct Store {
     /// Secondary index: `public_key` → `user id` for O(1) membership resolution.
     pub pubkey_index: Arc<DashMap<String, String>>,
     pub friends: Arc<DashMap<String, FriendRecord>>,
-    dirty: Arc<Notify>,
-    path: Arc<String>,
+    pub(crate) dirty: Arc<Notify>,
+    pub(crate) path: Arc<String>,
 }
 
 impl Store {
@@ -111,7 +113,7 @@ impl Store {
         Ok(())
     }
 
-    fn read_snapshot(
+    pub(crate) fn read_snapshot(
         path: &str,
     ) -> (
         Arc<DashMap<String, UserRecord>>,

@@ -23,7 +23,12 @@ export const LoginView = ({ onLogin, onRecover }: LoginViewProps) => {
             setError(null);
             await onLogin(pseudo.trim(), password);
         } catch (err: any) {
-            setError(err?.toString() ?? 'Erreur lors de la création.');
+            const _msg = err?.message ?? err?.toString() ?? '';
+            if (_msg.includes('already taken') || _msg.includes('Conflict')) {
+                setError('Ce pseudo est déjà pris. Utilisez « Connexion » pour vous connecter.');
+            } else {
+                setError(_msg || 'Erreur lors de la création.');
+            }
         }
     };
 
@@ -34,7 +39,12 @@ export const LoginView = ({ onLogin, onRecover }: LoginViewProps) => {
             setError(null);
             await onRecover(pseudo.trim(), password);
         } catch (err: any) {
-            setError(err?.toString() ?? 'Pseudo ou mot de passe incorrect.');
+            const _msg = err?.message ?? err?.toString() ?? '';
+            if (_msg.includes('Unauthorized') || _msg.includes('Unknown public key')) {
+                setError('Aucun compte trouvé pour cette identité. Vérifiez pseudo / mot de passe ou créez un compte.');
+            } else {
+                setError(_msg || 'Erreur de connexion.');
+            }
         }
     };
 

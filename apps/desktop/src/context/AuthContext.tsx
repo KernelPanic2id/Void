@@ -4,10 +4,30 @@ import { AuthState } from '../models/auth/authState.model';
 import Identity from '../models/auth/identity.model';
 import { formatUserTag } from '../lib/format-user-tag';
 import { mapIdentity } from '../lib/map-identity';
-import { registerAccount, loginAccount, getMe, updateMe } from '../api/auth.api';
+import { registerAccount, loginAccount, getMe, updateMe, syncPublicKey } from '../api/auth.api';
 import { getToken, setToken, clearToken } from '../api/http-client';
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
+
+/**
+ * Checks JWT expiry client-side (avoids flash when token is stale).
+ * @returns Valid stored token or null when expired / malformed.
+ */
+const _validStoredToken = (): string | null => {
+    const _t = getToken();
+    if (!_t) return null;
+    try {
+        const _payload = JSON.parse(atob(_t.split('.')[1]));
+        if (_payload.exp * 1000 < Date.now()) {
+            clearToken();
+            return null;
+        }
+        return _t;
+    } catch {
+        clearToken();
+        return null;
+    }
+};
 
 /**
  * Authentication provider combining local Ed25519 identity (Tauri) with
@@ -16,148 +36,80 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [identity, setIdentity] = useState<Identity | null>(null);
     const [serverUserId, setServerUserId] = useState<string | null>(null);
-    const [token, setTokenState] = useState<string | null>(getToken());
+    // Token state starts null — set only AFTER pk sync completes (prevents stale fetchServers)
+    const [token, setTokenState] = useState<string | null>(null);
 
-    // Restore session on mount
+    // Restore session on mount: identity + JWT validation + pk sync
     useEffect(() => {
         const _lastKey = localStorage.getItem('last_public_key');
         if (_lastKey) {
-            console.debug('[Auth] restoring identity for pk:', _lastKey.slice(0, 12) + '…');
             invoke('find_identity_by_pubkey', { publicKey: _lastKey })
-                .then((raw) => {
-                    const _id = mapIdentity(raw);
-                    console.debug('[Auth] identity restored:', _id.pseudo, 'pk:', _id.publicKey?.slice(0, 12) + '…');
-                    setIdentity(_id);
-                })
-                .catch((e) => {
-                    console.warn('[Auth] identity restore failed:', e);
-                    localStorage.removeItem('last_public_key');
-                });
-        } else {
-            console.debug('[Auth] no last_public_key in localStorage');
+                .then((raw) => setIdentity(mapIdentity(raw)))
+                .catch(() => localStorage.removeItem('last_public_key'));
         }
-        // Restore server session from stored JWT
-        if (getToken()) {
-            console.debug('[Auth] validating stored JWT via /me');
+
+        const _jwt = _validStoredToken();
+        if (_jwt) {
             getMe()
-                .then((profile) => {
-                    console.debug('[Auth] /me success — serverUserId:', profile.id, 'pk:', (profile as any).publicKey?.slice(0, 12) ?? 'none');
+                .then(async (profile) => {
                     setServerUserId(profile.id);
+                    // Sync pk when local identity diverges from server record
+                    if (_lastKey && profile.publicKey !== _lastKey) {
+                        try { await syncPublicKey(_lastKey); } catch { /* noop */ }
+                    }
+                    // Token set AFTER sync so fetchServers uses consistent data
+                    setTokenState(_jwt);
                 })
-                .catch((e) => {
-                    console.warn('[Auth] /me failed — clearing token:', e);
-                    clearToken();
-                    setTokenState(null);
-                });
-        } else {
-            console.debug('[Auth] no stored JWT');
+                .catch(() => { clearToken(); });
         }
     }, []);
 
     /**
-     * Creates or recovers a local Ed25519 identity then authenticates on the server.
-     * Tries recovering an existing identity first to preserve the original keypair
-     * (important: server-side membership is keyed by public_key).
+     * Persists local identity and sets token state after server auth.
      */
-    const login = useCallback(async (pseudo: string, password: string) => {
-        let _identity: Identity;
-        let _isNew = false;
-
-        // Prefer recovering an existing local identity to keep the original keypair
-        try {
-            const _raw = await invoke('recover_identity', { pseudo, password });
-            _identity = mapIdentity(_raw);
-            console.debug('[Auth] recover_identity OK — pk:', _identity.publicKey?.slice(0, 12) + '…');
-        } catch (recoverErr) {
-            console.debug('[Auth] recover_identity failed:', recoverErr, '— creating new identity');
-            // No existing identity — generate a fresh Ed25519 keypair
-            const _raw = await invoke('create_identity', { pseudo, password });
-            _identity = mapIdentity(_raw);
-            _isNew = true;
-            console.debug('[Auth] create_identity OK — NEW pk:', _identity.publicKey?.slice(0, 12) + '…');
-        }
-
+    const _finalizeAuth = useCallback((_identity: Identity, res: { token: string; user: { id: string } }) => {
         const _pk = _identity.publicKey ?? (_identity as any).public_key;
         localStorage.setItem('last_public_key', _pk);
         setIdentity(_identity);
-
-        try {
-            if (_isNew) {
-                console.debug('[Auth] registering new account on server…');
-                const res = await registerAccount(pseudo, password, pseudo, _pk);
-                setToken(res.token);
-                setTokenState(res.token);
-                setServerUserId(res.user.id);
-                console.debug('[Auth] register OK — serverUserId:', res.user.id);
-            } else {
-                console.debug('[Auth] logging in to server…');
-                const res = await loginAccount(pseudo, password, _pk);
-                setToken(res.token);
-                setTokenState(res.token);
-                setServerUserId(res.user.id);
-                console.debug('[Auth] login OK — serverUserId:', res.user.id);
-            }
-        } catch (serverErr) {
-            console.warn('[Auth] server auth failed:', serverErr, '_isNew:', _isNew);
-            if (_isNew) {
-                // New identity but username taken on server → try login
-                try {
-                    console.debug('[Auth] fallback: trying loginAccount for new identity…');
-                    const res = await loginAccount(pseudo, password, _pk);
-                    setToken(res.token);
-                    setTokenState(res.token);
-                    setServerUserId(res.user.id);
-                    console.debug('[Auth] fallback login OK — serverUserId:', res.user.id);
-                } catch (fallbackErr) {
-                    console.warn('[Auth] fallback login also failed:', fallbackErr);
-                }
-            } else {
-                // Existing identity but server login failed → try register
-                try {
-                    console.debug('[Auth] fallback: trying registerAccount for existing identity…');
-                    const res = await registerAccount(pseudo, password, pseudo, _pk);
-                    setToken(res.token);
-                    setTokenState(res.token);
-                    setServerUserId(res.user.id);
-                    console.debug('[Auth] fallback register OK — serverUserId:', res.user.id);
-                } catch (fallbackErr) {
-                    console.warn('[Auth] fallback register also failed:', fallbackErr);
-                }
-            }
-        }
+        setToken(res.token);
+        setTokenState(res.token);
+        setServerUserId(res.user.id);
     }, []);
 
-    /** Recovers local identity + logs in on server (syncing public key). */
-    const recover = useCallback(async (pseudo: string, password: string) => {
-        const _raw = await invoke('recover_identity', { pseudo, password });
+    /**
+     * "Créer" — generates a brand-new Ed25519 identity locally (pseudo + password
+     * only unlock the local keystore) and registers on the server via nonce
+     * challenge. Password never leaves the client.
+     */
+    const login = useCallback(async (pseudo: string, password: string) => {
+        const _raw = await invoke('create_identity', { pseudo, password });
         const _identity = mapIdentity(_raw);
-        const _pk = _identity.publicKey ?? ((_raw as any).public_key);
-        console.debug('[Auth] recover OK — pk:', _pk?.slice(0, 12) + '…');
+        const _pk = _identity.publicKey ?? (_identity as any).public_key;
 
-        localStorage.setItem('last_public_key', _pk);
-        setIdentity(_identity);
+        const res = await registerAccount(pseudo, pseudo, _pk);
+        _finalizeAuth(_identity, res);
+    }, [_finalizeAuth]);
 
-        // Try login first, fall back to register if account doesn't exist
+    /**
+     * "Connexion" — recovers an existing local identity (or regenerates the
+     * keypair when local files are lost) using pseudo + password as local
+     * keystore unlock, then authenticates on the server via Ed25519 nonce
+     * challenge only. Password never leaves the client.
+     */
+    const recover = useCallback(async (pseudo: string, password: string) => {
+        let _identity: Identity;
         try {
-            console.debug('[Auth] recover → loginAccount…');
-            const res = await loginAccount(pseudo, password, _pk);
-            setToken(res.token);
-            setTokenState(res.token);
-            setServerUserId(res.user.id);
-            console.debug('[Auth] recover login OK — serverUserId:', res.user.id);
-        } catch (loginErr) {
-            console.warn('[Auth] recover login failed:', loginErr, '— trying register');
-            try {
-                const res = await registerAccount(pseudo, password, pseudo, _pk);
-                setToken(res.token);
-                setTokenState(res.token);
-                setServerUserId(res.user.id);
-                console.debug('[Auth] recover register OK — serverUserId:', res.user.id);
-            } catch (registerErr) {
-                console.warn('[Auth] recover register also failed:', registerErr);
-            }
+            const _raw = await invoke('recover_identity', { pseudo, password });
+            _identity = mapIdentity(_raw);
+        } catch {
+            const _raw = await invoke('create_identity', { pseudo, password });
+            _identity = mapIdentity(_raw);
         }
-    }, []);
+
+        const _pk = _identity.publicKey ?? (_identity as any).public_key;
+        const res = await loginAccount(_pk);
+        _finalizeAuth(_identity, res);
+    }, [_finalizeAuth]);
 
     /** Updates the pseudo for the current identity (local + server). */
     const updateUsername = useCallback(async (newName: string) => {
@@ -199,11 +151,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const resolvedPublicKey = identity?.publicKey ?? (identity as any)?.public_key ?? null;
 
-    // Diagnostic: trace the exact pk exposed to ServerContext
-    useEffect(() => {
-        console.debug('[Auth] resolvedPublicKey:', resolvedPublicKey?.slice(0, 20) + '…', 'token:', !!token);
-    }, [resolvedPublicKey, token]);
-
     const userTag = useMemo(() => {
         return identity?.pseudo && resolvedPublicKey
             ? formatUserTag(identity.pseudo, resolvedPublicKey)
@@ -220,7 +167,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             userTag,
             serverUserId,
             token,
-            isAuthenticated: !!identity,
+            isAuthenticated: !!identity && !!token,
             login,
             recover,
             logout,

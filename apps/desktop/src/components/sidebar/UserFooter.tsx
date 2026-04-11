@@ -1,6 +1,7 @@
 import { Headphones, Mic, MicOff, Settings, PhoneOff, LogOut, MonitorUp, MonitorOff } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import UserFooterProps from '../../models/ui/userFooterProps.model';
+import { VoiceDetailsPortal } from './VoiceDetailsPortal';
 
 const NetworkIcon = ({ quality }: { quality: 0 | 1 | 2 | 3 }) => {
     const getColor = () => {
@@ -57,27 +58,18 @@ const UserFooter = ({
 
     const menuRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
-    const voiceDetailsRef = useRef<HTMLDivElement>(null);
     const voiceConnectedRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         function handleClick(e: MouseEvent) {
-            if (buttonRef.current && buttonRef.current.contains(e.target as Node)) {
-                return; // Géré par le onClick du bouton
-            }
+            if (buttonRef.current && buttonRef.current.contains(e.target as Node)) return;
             if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
                 setMenuOpen(false);
             }
-            if (showVoiceDetails) {
-                if (voiceConnectedRef.current && voiceConnectedRef.current.contains(e.target as Node)) return;
-                if (voiceDetailsRef.current && !voiceDetailsRef.current.contains(e.target as Node)) {
-                    setShowVoiceDetails(false);
-                }
-            }
         }
-        if (menuOpen || showVoiceDetails) document.addEventListener('mousedown', handleClick);
+        if (menuOpen) document.addEventListener('mousedown', handleClick);
         return () => document.removeEventListener('mousedown', handleClick);
-    }, [menuOpen, showVoiceDetails]);
+    }, [menuOpen]);
 
     const fontStyle = { fontFamily: 'gg sans, "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif' };
 
@@ -93,65 +85,17 @@ const UserFooter = ({
         <div className="w-full select-none glass-heavy flex flex-col flex-shrink-0 border-t border-cyan-500/20 shadow-[0_-10px_30px_rgba(0,0,0,0.5)] z-20">
             {channelId && (
                 <div className="h-[48px] px-3 flex items-center border-b border-cyan-500/10 relative">
-                    {showVoiceDetails && isConnected && (
-                        <div
-                            ref={voiceDetailsRef}
-                            className="absolute bottom-full left-0 mb-3 ml-2 w-[340px] glass-heavy rounded-xl shadow-[0_10px_40px_rgba(34,211,238,0.2)] border border-cyan-500/30 z-[100] animate-in fade-in slide-in-from-bottom-2 duration-300"
-                        >
-                            <div className="p-4 pt-5 pb-3">
-                                <h3 className="text-cyan-50 font-bold uppercase tracking-widest text-[16px] mb-4">Voice System Matrix</h3>
-                                <div className="flex border-b border-cyan-500/20 mb-4 pb-2">
-                                    <button
-                                        onClick={() => setVoiceDetailsTab('connexion')}
-                                        className={`pb-2 px-1 mr-4 text-[14px] font-medium transition-colors relative ${voiceDetailsTab === 'connexion' ? 'text-cyan-400' : 'text-gray-500 hover:text-cyan-100'}`}
-                                    >
-                                        Connexion
-                                        {voiceDetailsTab === 'connexion' && (
-                                            <div className="absolute bottom-[-9px] left-0 right-0 h-[2px] bg-cyan-400 shadow-[0_0_10px_#22d3ee]"></div>
-                                        )}
-                                    </button>
-                                    <button
-                                        onClick={() => setVoiceDetailsTab('confidentialité')}
-                                        className={`pb-2 px-1 text-[14px] font-medium transition-colors relative ${voiceDetailsTab === 'confidentialité' ? 'text-cyan-400' : 'text-gray-500 hover:text-cyan-100'}`}
-                                    >
-                                        Confidentialité
-                                        {voiceDetailsTab === 'confidentialité' && (
-                                            <div className="absolute bottom-[-9px] left-0 right-0 h-[2px] bg-cyan-400 shadow-[0_0_10px_#22d3ee]"></div>
-                                        )}
-                                    </button>
-                                </div>
-                                {voiceDetailsTab === 'connexion' ? (
-                                    <div className="text-[14px] text-cyan-100/70" style={fontStyle}>
-                                        <div className="mb-1">
-                                            <span className="font-semibold text-cyan-500/80 uppercase text-[10px] tracking-wider">Latence moyenne : </span>
-                                            <span className="font-bold text-cyan-300">{averagePing} ms</span>
-                                        </div>
-                                        <div className="mb-1">
-                                            <span className="font-semibold text-cyan-500/80 uppercase text-[10px] tracking-wider">Dernière latence : </span>
-                                            <span className="font-bold text-cyan-300">{ping} ms</span>
-                                        </div>
-                                        <div className="mb-4">
-                                            <span className="font-semibold text-cyan-500/80 uppercase text-[10px] tracking-wider">Perte de paquets : </span>
-                                            <span className="font-bold text-cyan-300">{packetLoss.toFixed(1)} %</span>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="text-[14px] text-cyan-100/70" style={fontStyle}>
-                                        <p className="leading-relaxed">
-                                            La transmission vocale et vidéo n'est pas complètement chiffrée de bout en bout pour le moment sur Void. Notre protocole de signalisation est sécurisé, mais l'architecture serveur (SFU) nécessite de déchiffrer les flux média (DTLS/SRTP) en mémoire pour les redistribuer aux autres pairs.
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-                                <div className="glass p-3 rounded-b-xl flex items-center justify-between border-t border-cyan-500/20">
-                                <div className="flex items-center text-cyan-400 text-[12px] font-semibold">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mr-1"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
-                                    Chiffré de bout en bout
-                                </div>
-                                <a href="#" className="text-blue-400 hover:text-cyan-300 hover:underline text-[12px] font-medium transition-colors">En savoir plus</a>
-                            </div>
-                        </div>
-                    )}
+                    <VoiceDetailsPortal
+                        show={showVoiceDetails && isConnected}
+                        anchorRef={voiceConnectedRef}
+                        onClose={() => setShowVoiceDetails(false)}
+                        voiceDetailsTab={voiceDetailsTab}
+                        setVoiceDetailsTab={setVoiceDetailsTab}
+                        averagePing={averagePing}
+                        ping={ping}
+                        packetLoss={packetLoss}
+                        fontStyle={fontStyle}
+                    />
                     <div 
                         ref={voiceConnectedRef}
                         className="flex items-center flex-1 min-w-0 px-1 py-1 rounded-lg hover:bg-cyan-500/10 border border-transparent hover:border-cyan-500/30 cursor-pointer relative group transition-all duration-300"

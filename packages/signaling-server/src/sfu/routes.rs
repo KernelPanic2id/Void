@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::extract::{Path, State};
 use axum::http::HeaderMap;
 use axum::routing::{delete, get, post};
-use axum::{Json, Router};
+use axum::{Extension, Json, Router};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -12,6 +12,8 @@ use super::models::{Server, ServerChannel};
 use super::state::{AppState, ChatEntry};
 use crate::auth::middleware::AuthUser;
 use crate::errors::ApiError;
+use crate::models::UserSummary;
+use crate::nonce::NonceStore;
 
 // ---------------------------------------------------------------------------
 // Request / Response DTOs
@@ -22,7 +24,7 @@ use crate::errors::ApiError;
 pub struct CreateServerBody {
     pub name: String,
     pub owner_public_key: String,
-    pub timestamp: i64,
+    pub nonce: String,
     pub signature: String,
 }
 
@@ -37,7 +39,7 @@ pub struct JoinServerBody {
 #[serde(rename_all = "camelCase")]
 pub struct SignedAdminBody {
     pub owner_public_key: String,
-    pub timestamp: i64,
+    pub nonce: String,
     pub signature: String,
 }
 
@@ -47,7 +49,7 @@ pub struct CreateChannelBody {
     pub name: String,
     pub r#type: String,
     pub owner_public_key: String,
-    pub timestamp: i64,
+    pub nonce: String,
     pub signature: String,
 }
 
@@ -128,6 +130,7 @@ pub fn router() -> Router<Arc<AppState>> {
         .route("/join-by-invite", post(join_by_invite))
         .route("/:id", get(get_server).delete(delete_server))
         .route("/:id/join", post(join_server))
+        .route("/:id/members", get(list_server_members))
         .route("/:id/channels", post(create_channel))
         .route("/:id/channels/:channel_id", delete(delete_channel))
         .route("/:id/channels/:channel_id/messages", get(get_channel_messages))
@@ -140,6 +143,7 @@ pub fn router() -> Router<Arc<AppState>> {
 /// POST /api/servers — creates a server with ownership proof.
 async fn create_server(
     State(state): State<Arc<AppState>>,
+    Extension(nonces): Extension<NonceStore>,
     Json(body): Json<CreateServerBody>,
 ) -> Result<Json<ServerResponse>, ApiError> {
     let name = body.name.trim().to_string();
@@ -147,10 +151,9 @@ async fn create_server(
         return Err(ApiError::BadRequest("Name must be at least 2 characters".into()));
     }
 
-    crypto::check_timestamp(body.timestamp)
-        .map_err(|e| ApiError::BadRequest(e))?;
+    nonces.consume(&body.nonce)?;
 
-    let message = format!("create:{}:{}", name, body.timestamp);
+    let message = format!("create:{}:{}", name, body.nonce);
     let valid = crypto::verify_signature(&body.owner_public_key, message.as_bytes(), &body.signature)
         .map_err(|e| ApiError::BadRequest(e))?;
 
@@ -354,9 +357,34 @@ async fn get_server(
     Ok(Json(ServerResponse::from_server(server.value(), is_owner)))
 }
 
+/// GET /api/servers/:id/members — resolves all member public keys into UserSummary profiles.
+async fn list_server_members(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<Vec<UserSummary>>, ApiError> {
+    let server = state
+        .server_registry
+        .servers
+        .get(&id)
+        .ok_or_else(|| ApiError::NotFound("Server not found".into()))?;
+
+    let members: Vec<UserSummary> = server
+        .members
+        .iter()
+        .filter_map(|pk| {
+            let user_id = state.auth_store.pubkey_index.get(pk)?;
+            let record = state.auth_store.users.get(user_id.value())?;
+            Some(UserSummary::from(record.value()))
+        })
+        .collect();
+
+    Ok(Json(members))
+}
+
 /// DELETE /api/servers/:id — requires ownership signature.
 async fn delete_server(
     State(state): State<Arc<AppState>>,
+    Extension(nonces): Extension<NonceStore>,
     Path(id): Path<String>,
     Json(body): Json<SignedAdminBody>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
@@ -371,10 +399,9 @@ async fn delete_server(
     }
     drop(server);
 
-    crypto::check_timestamp(body.timestamp)
-        .map_err(|e| ApiError::BadRequest(e))?;
+    nonces.consume(&body.nonce)?;
 
-    let message = format!("delete:{}:{}", id, body.timestamp);
+    let message = format!("delete:{}:{}", id, body.nonce);
     let valid = crypto::verify_signature(&body.owner_public_key, message.as_bytes(), &body.signature)
         .map_err(|e| ApiError::BadRequest(e))?;
 
@@ -454,6 +481,7 @@ async fn join_server(
 /// POST /api/servers/:id/channels — create channel (owner only).
 async fn create_channel(
     State(state): State<Arc<AppState>>,
+    Extension(nonces): Extension<NonceStore>,
     Path(id): Path<String>,
     Json(body): Json<CreateChannelBody>,
 ) -> Result<Json<ServerResponse>, ApiError> {
@@ -467,10 +495,9 @@ async fn create_channel(
         return Err(ApiError::Forbidden("Not the server owner".into()));
     }
 
-    crypto::check_timestamp(body.timestamp)
-        .map_err(|e| ApiError::BadRequest(e))?;
+    nonces.consume(&body.nonce)?;
 
-    let message = format!("create_channel:{}:{}:{}", id, body.name, body.timestamp);
+    let message = format!("create_channel:{}:{}:{}", id, body.name, body.nonce);
     let valid = crypto::verify_signature(&body.owner_public_key, message.as_bytes(), &body.signature)
         .map_err(|e| ApiError::BadRequest(e))?;
 
@@ -495,6 +522,7 @@ async fn create_channel(
 /// DELETE /api/servers/:id/channels/:channel_id — owner only.
 async fn delete_channel(
     State(state): State<Arc<AppState>>,
+    Extension(nonces): Extension<NonceStore>,
     Path((id, channel_id)): Path<(String, String)>,
     Json(body): Json<SignedAdminBody>,
 ) -> Result<Json<ServerResponse>, ApiError> {
@@ -508,10 +536,9 @@ async fn delete_channel(
         return Err(ApiError::Forbidden("Not the server owner".into()));
     }
 
-    crypto::check_timestamp(body.timestamp)
-        .map_err(|e| ApiError::BadRequest(e))?;
+    nonces.consume(&body.nonce)?;
 
-    let message = format!("delete_channel:{}:{}:{}", id, channel_id, body.timestamp);
+    let message = format!("delete_channel:{}:{}:{}", id, channel_id, body.nonce);
     let valid = crypto::verify_signature(&body.owner_public_key, message.as_bytes(), &body.signature)
         .map_err(|e| ApiError::BadRequest(e))?;
 

@@ -69,10 +69,10 @@ const FINGERPRINT_IP_LIMIT: usize = 50;
 #[derive(Clone)]
 pub struct BanStore {
     pub entries: Arc<DashMap<String, BanRecord>>,
-    recidivism: Arc<DashMap<String, RecidivismRecord>>,
-    fingerprints: Arc<DashMap<String, FingerprintRecord>>,
-    dirty: Arc<Notify>,
-    path: Arc<String>,
+    pub(crate) recidivism: Arc<DashMap<String, RecidivismRecord>>,
+    pub(crate) fingerprints: Arc<DashMap<String, FingerprintRecord>>,
+    pub(crate) dirty: Arc<Notify>,
+    pub(crate) path: Arc<String>,
 }
 
 impl BanStore {

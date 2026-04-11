@@ -1,6 +1,5 @@
 import VoicePeer from '../voice/voicePeer.model';
-
-export type SidebarView = 'voice' | 'chat';
+import { SidebarView } from '../../types/sidebarView.type';
 
 export default interface SidebarContentProps {
     channelId: string | null;

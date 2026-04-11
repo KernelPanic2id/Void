@@ -98,28 +98,37 @@ pub struct Claims {
 // Request bodies (Deserialize + prost::Message for content negotiation)
 // ---------------------------------------------------------------------------
 
+/// Registration payload — password-free.
+/// Authentication relies solely on Ed25519 nonce challenge-response.
 #[derive(Clone, PartialEq, Deserialize, prost::Message)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterBody {
     #[prost(string, tag = "1")]
     pub username: String,
-    #[prost(string, tag = "2")]
-    pub password: String,
+    // tag 2 reserved (formerly password — never sent to server)
     #[prost(string, tag = "3")]
     pub display_name: String,
-    #[prost(string, optional, tag = "4")]
-    pub public_key: Option<String>,
+    #[prost(string, tag = "4")]
+    pub public_key: String,
+    #[prost(string, tag = "5")]
+    pub nonce: String,
+    #[prost(string, tag = "6")]
+    pub signature: String,
 }
 
+/// Login payload — password-free.
+/// The server identifies the user by `public_key` via `pubkey_index`.
 #[derive(Clone, PartialEq, Deserialize, prost::Message)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginBody {
-    #[prost(string, tag = "1")]
-    pub username: String,
-    #[prost(string, tag = "2")]
-    pub password: String,
-    #[prost(string, optional, tag = "3")]
-    pub public_key: Option<String>,
+    // tag 1 reserved (formerly username — not needed for pk-based auth)
+    // tag 2 reserved (formerly password — never sent to server)
+    #[prost(string, tag = "3")]
+    pub public_key: String,
+    #[prost(string, tag = "4")]
+    pub nonce: String,
+    #[prost(string, tag = "5")]
+    pub signature: String,
 }
 
 #[derive(Clone, PartialEq, Deserialize, prost::Message)]
@@ -129,6 +138,8 @@ pub struct UpdateProfileBody {
     pub display_name: Option<String>,
     #[prost(string, optional, tag = "2")]
     pub avatar: Option<String>,
+    #[prost(string, optional, tag = "3")]
+    pub public_key: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Deserialize, prost::Message)]

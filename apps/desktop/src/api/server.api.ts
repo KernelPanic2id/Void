@@ -1,6 +1,8 @@
 import { invoke } from '@tauri-apps/api/core';
 import { apiFetch } from './http-client';
+import { fetchNonce } from './nonce.api';
 import { Server } from '../models/server/server.model';
+import { UserSummary } from '../models/auth/serverAuth.model';
 import ChatMessage from '../models/chat/chatMessage.model';
 
 /**
@@ -14,18 +16,18 @@ async function signMessage(publicKey: string, message: string): Promise<string> 
 }
 
 /**
- * POST /api/servers — creates a server with an Ed25519 ownership proof.
+ * POST /api/servers — creates a server with a nonce-challenged Ed25519 ownership proof.
  * @param name - Display name of the server.
  * @param ownerPublicKey - Creator's Ed25519 public key.
  */
 export async function createServer(name: string, ownerPublicKey: string): Promise<Server> {
-    const timestamp = Date.now();
-    const message = `create:${name}:${timestamp}`;
+    const nonce = await fetchNonce();
+    const message = `create:${name}:${nonce}`;
     const signature = await signMessage(ownerPublicKey, message);
 
     return apiFetch<Server>('/api/servers', {
         method: 'POST',
-        body: JSON.stringify({ name, ownerPublicKey, timestamp, signature }),
+        body: JSON.stringify({ name, ownerPublicKey, nonce, signature }),
     });
 }
 
@@ -40,18 +42,18 @@ export async function getServer(id: string): Promise<Server> {
 }
 
 /**
- * DELETE /api/servers/:id — deletes a server (owner only, signed).
+ * DELETE /api/servers/:id — deletes a server (owner only, nonce-challenged).
  * @param id - Server UUID.
  * @param ownerPublicKey - Owner's Ed25519 public key.
  */
 export async function deleteServer(id: string, ownerPublicKey: string): Promise<void> {
-    const timestamp = Date.now();
-    const message = `delete:${id}:${timestamp}`;
+    const nonce = await fetchNonce();
+    const message = `delete:${id}:${nonce}`;
     const signature = await signMessage(ownerPublicKey, message);
 
     await apiFetch(`/api/servers/${id}`, {
         method: 'DELETE',
-        body: JSON.stringify({ ownerPublicKey, timestamp, signature }),
+        body: JSON.stringify({ ownerPublicKey, nonce, signature }),
     });
 }
 
@@ -88,7 +90,7 @@ export async function joinServerByInvite(
 }
 
 /**
- * POST /api/servers/:id/channels — creates a channel (owner only, signed).
+ * POST /api/servers/:id/channels — creates a channel (owner only, nonce-challenged).
  * @param serverId - Server UUID.
  * @param name - Channel display name.
  * @param type - Channel type (text | voice | video).
@@ -100,18 +102,18 @@ export async function createChannel(
     type: string,
     ownerPublicKey: string,
 ): Promise<Server> {
-    const timestamp = Date.now();
-    const message = `create_channel:${serverId}:${name}:${timestamp}`;
+    const nonce = await fetchNonce();
+    const message = `create_channel:${serverId}:${name}:${nonce}`;
     const signature = await signMessage(ownerPublicKey, message);
 
     return apiFetch<Server>(`/api/servers/${serverId}/channels`, {
         method: 'POST',
-        body: JSON.stringify({ name, type, ownerPublicKey, timestamp, signature }),
+        body: JSON.stringify({ name, type, ownerPublicKey, nonce, signature }),
     });
 }
 
 /**
- * DELETE /api/servers/:id/channels/:channelId — deletes a channel (owner only).
+ * DELETE /api/servers/:id/channels/:channelId — deletes a channel (owner only, nonce-challenged).
  * @param serverId - Server UUID.
  * @param channelId - Channel UUID.
  * @param ownerPublicKey - Owner's Ed25519 public key.
@@ -121,14 +123,22 @@ export async function deleteChannel(
     channelId: string,
     ownerPublicKey: string,
 ): Promise<Server> {
-    const timestamp = Date.now();
-    const message = `delete_channel:${serverId}:${channelId}:${timestamp}`;
+    const nonce = await fetchNonce();
+    const message = `delete_channel:${serverId}:${channelId}:${nonce}`;
     const signature = await signMessage(ownerPublicKey, message);
 
     return apiFetch<Server>(`/api/servers/${serverId}/channels/${channelId}`, {
         method: 'DELETE',
-        body: JSON.stringify({ ownerPublicKey, timestamp, signature }),
+        body: JSON.stringify({ ownerPublicKey, nonce, signature }),
     });
+}
+
+/**
+ * GET /api/servers/:id/members — resolves member public keys into user profiles.
+ * @param serverId - Server UUID.
+ */
+export async function listServerMembers(serverId: string): Promise<UserSummary[]> {
+    return apiFetch<UserSummary[]>(`/api/servers/${serverId}/members`);
 }
 
 /**

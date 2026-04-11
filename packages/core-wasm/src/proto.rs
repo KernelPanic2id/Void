@@ -100,28 +100,37 @@ pub struct PendingRequestList {
 // API request types
 // ---------------------------------------------------------------------------
 
+/// Registration payload — password-free.
+/// Auth relies solely on Ed25519 nonce challenge-response.
 #[derive(Clone, PartialEq, Message, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterBody {
     #[prost(string, tag = "1")]
     pub username: String,
-    #[prost(string, tag = "2")]
-    pub password: String,
+    // tag 2 reserved (formerly password — never sent to server)
     #[prost(string, tag = "3")]
     pub display_name: String,
-    #[prost(string, optional, tag = "4")]
-    pub public_key: Option<String>,
+    #[prost(string, tag = "4")]
+    pub public_key: String,
+    #[prost(string, tag = "5")]
+    pub nonce: String,
+    #[prost(string, tag = "6")]
+    pub signature: String,
 }
 
+/// Login payload — password-free.
+/// Server identifies user by `public_key` via `pubkey_index`.
 #[derive(Clone, PartialEq, Message, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoginBody {
-    #[prost(string, tag = "1")]
-    pub username: String,
-    #[prost(string, tag = "2")]
-    pub password: String,
-    #[prost(string, optional, tag = "3")]
-    pub public_key: Option<String>,
+    // tag 1 reserved (formerly username)
+    // tag 2 reserved (formerly password)
+    #[prost(string, tag = "3")]
+    pub public_key: String,
+    #[prost(string, tag = "4")]
+    pub nonce: String,
+    #[prost(string, tag = "5")]
+    pub signature: String,
 }
 
 #[derive(Clone, PartialEq, Message, Serialize, Deserialize)]
@@ -131,6 +140,8 @@ pub struct UpdateProfileBody {
     pub display_name: Option<String>,
     #[prost(string, optional, tag = "2")]
     pub avatar: Option<String>,
+    #[prost(string, optional, tag = "3")]
+    pub public_key: Option<String>,
 }
 
 #[derive(Clone, PartialEq, Message, Serialize, Deserialize)]

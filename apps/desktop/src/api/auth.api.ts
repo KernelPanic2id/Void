@@ -1,4 +1,6 @@
-import { apiFetchProto } from './http-client';
+import { invoke } from '@tauri-apps/api/core';
+import { apiFetch, apiFetchProto } from './http-client';
+import { fetchNonce } from './nonce.api';
 import {
     ensureWasm,
     encodeRegisterBody,
@@ -15,38 +17,50 @@ import {
     UserSummary,
 } from '../models/auth/serverAuth.model';
 
+
 /**
- * POST /api/auth/register
- * @param username - Unique login name (min 2 chars, lowercased server-side).
- * @param password - Cleartext password (min 4 chars, hashed server-side).
+ * Signs a message with the local Ed25519 private key via Tauri.
+ * @param publicKey - Base64-encoded public key identifying the signer.
+ * @param message - Plain text message to sign.
+ */
+async function signMessage(publicKey: string, message: string): Promise<string> {
+    return invoke<string>('sign_message', { publicKey, message });
+}
+
+/**
+ * POST /api/auth/register — password-free, nonce-challenged registration.
+ * The server authenticates via Ed25519 signature only.
+ * @param username - Unique display name (min 2 chars, lowercased server-side).
  * @param displayName - Display name shown to other users.
- * @param publicKey - Optional Ed25519 public key from local identity.
+ * @param publicKey - Ed25519 public key (identity proof via nonce challenge).
  */
 export const registerAccount = async (
     username: string,
-    password: string,
     displayName: string,
-    publicKey?: string | null,
+    publicKey: string,
 ): Promise<AuthResponse> => {
     await ensureWasm();
-    const bytes = encodeRegisterBody({ username, password, displayName, publicKey: publicKey ?? undefined });
+    const nonce = await fetchNonce();
+    const challenge = `register:${username.trim().toLowerCase()}:${nonce}`;
+    const signature = await signMessage(publicKey, challenge);
+    const bytes = encodeRegisterBody({ username, displayName, publicKey, nonce, signature });
     const res = await apiFetchProto('/api/auth/register', { method: 'POST', body: bytes });
     return decodeAuthResponse(res) as AuthResponse;
 };
 
 /**
- * POST /api/auth/login
- * @param username - Login name.
- * @param password - Cleartext password.
- * @param publicKey - Optional Ed25519 public key to sync with the server record.
+ * POST /api/auth/login — password-free, nonce-challenged authentication.
+ * The server identifies the user by public_key via `pubkey_index`.
+ * @param publicKey - Ed25519 public key (identity proof via nonce challenge).
  */
 export const loginAccount = async (
-    username: string,
-    password: string,
-    publicKey?: string | null,
+    publicKey: string,
 ): Promise<AuthResponse> => {
     await ensureWasm();
-    const bytes = encodeLoginBody({ username, password, publicKey: publicKey ?? undefined });
+    const nonce = await fetchNonce();
+    const challenge = `login:${publicKey}:${nonce}`;
+    const signature = await signMessage(publicKey, challenge);
+    const bytes = encodeLoginBody({ publicKey, nonce, signature });
     const res = await apiFetchProto('/api/auth/login', { method: 'POST', body: bytes });
     return decodeAuthResponse(res) as AuthResponse;
 };
@@ -78,3 +92,17 @@ export const searchUsers = async (query: string): Promise<UserSummary[]> => {
     const res = await apiFetchProto(`/api/auth/users/search?q=${encodeURIComponent(query)}`);
     return decodeUserSummaryList(res) as UserSummary[];
 };
+
+/**
+ * PATCH /api/auth/me (JSON) — syncs the local Ed25519 public key with the
+ * server-side user record. Uses JSON instead of protobuf to avoid requiring
+ * a WASM recompilation when only the pk field is sent.
+ * @param publicKey - Current Ed25519 public key from local identity.
+ */
+export const syncPublicKey = async (publicKey: string): Promise<void> => {
+    await apiFetch('/api/auth/me', {
+        method: 'PATCH',
+        body: JSON.stringify({ publicKey }),
+    });
+};
+

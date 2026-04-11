@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { ChevronDown, Plus, Settings, Hash } from 'lucide-react';
+import { ChevronDown, Plus, Settings, Hash, Users } from 'lucide-react';
 import { ServerChannel } from '../../models/server/server.model';
 import { ChannelItem } from './ChannelItem';
 import { CreateChannelModal } from './CreateChannelModal';
 import { VoiceParticipantCard } from './VoiceParticipantCard';
 import { ServerSettingsModal } from '../ui/ServerSettingsModal';
+import { ServerMembersPanel } from '../sidebar/ServerMembersPanel';
+import { useServerMembers } from '../../hooks/useServerMembers';
 import ChannelListProps from '../../models/channel/channelListProps.model';
 
 /**
@@ -27,6 +29,12 @@ export const ChannelList = ({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
+  const [membersExpanded, setMembersExpanded] = useState(true);
+
+  const { members: resolvedMembers, loading: membersLoading } = useServerMembers(
+    server.id,
+    server.ownerPublicKey,
+  );
 
   const textChannels = server.channels.filter(c => c.type === 'text');
   const voiceChannels = server.channels.filter(c => c.type !== 'text');
@@ -81,7 +89,6 @@ export const ChannelList = ({
                   isActive={activeChannelId === channel.id || voiceChannelId === channel.id}
                   onSelect={() => handleChannelClick(channel)}
                 />
-                {/* Participants in active voice channel */}
                 {voiceChannelId === channel.id && channel.type !== 'text' && participants.length > 0 && (
                   <div className="ml-8 pl-3 border-l-2 border-cyan-500/20 my-1 py-1 flex flex-col gap-0.5 transition-all duration-300">
                     {participants.map(p => (
@@ -104,6 +111,8 @@ export const ChannelList = ({
     );
   };
 
+  const _memberCount = resolvedMembers.length || server.members.length;
+
   return (
     <div className="flex flex-col h-full bg-transparent">
       {/* Server header */}
@@ -119,8 +128,8 @@ export const ChannelList = ({
         )}
       </div>
 
-      {/* Channel list */}
-      <div className="flex-1 overflow-y-auto py-3 custom-scrollbar">
+      {/* Channels — scrollable, takes remaining space */}
+      <div className="flex-1 min-h-0 overflow-y-auto py-3 custom-scrollbar">
         {textChannels.length > 0 && renderCategory('Salons textuels', textChannels)}
         {voiceChannels.length > 0 && renderCategory('Salons vocaux', voiceChannels)}
 
@@ -138,6 +147,28 @@ export const ChannelList = ({
                 Créer un salon
               </button>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Members — collapsable bottom section with its own scroll */}
+      <div className={`shrink-0 border-t border-cyan-500/10 flex flex-col transition-all duration-300 ${membersExpanded ? 'max-h-[40%]' : 'max-h-9'} overflow-hidden`}>
+        <button
+          onClick={() => setMembersExpanded(prev => !prev)}
+          className="flex items-center justify-between px-4 py-2 hover:bg-cyan-500/5 transition-colors shrink-0"
+        >
+          <div className="flex items-center gap-1.5 text-[11px] font-black text-cyan-500/70 uppercase tracking-[0.15em]">
+            <Users size={11} />
+            Membres — {_memberCount}
+          </div>
+          <ChevronDown
+            size={12}
+            className={`text-cyan-500/50 transition-transform duration-300 ${membersExpanded ? '' : '-rotate-90'}`}
+          />
+        </button>
+        {membersExpanded && (
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pb-2">
+            <ServerMembersPanel members={resolvedMembers} loading={membersLoading} />
           </div>
         )}
       </div>

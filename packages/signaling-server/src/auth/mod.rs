@@ -15,6 +15,8 @@ use crate::errors::ApiError;
 use crate::fraud::FraudState;
 use crate::models::*;
 use crate::negotiate::{accepts_proto, decode_body, negotiate, negotiate_list, Negotiated};
+use crate::nonce::NonceStore;
+use crate::sfu::crypto;
 use crate::sfu::registry::ServerRegistry;
 use crate::store::{Store, UserRecord};
 use middleware::AuthUser;
@@ -29,8 +31,10 @@ pub fn router() -> Router<Store> {
 }
 
 /// POST /api/auth/register
+/// Password-free — auth relies solely on Ed25519 nonce challenge-response.
 async fn register(
     State(store): State<Store>,
+    Extension(nonces): Extension<NonceStore>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Negotiated, ApiError> {
@@ -41,33 +45,44 @@ async fn register(
     if username.len() < 2 {
         return Err(ApiError::BadRequest("Username must be at least 2 characters".into()));
     }
-    if body.password.len() < 4 {
-        return Err(ApiError::BadRequest("Password must be at least 4 characters".into()));
+
+    let pk = &body.public_key;
+    if pk.is_empty() {
+        return Err(ApiError::BadRequest("public_key is required".into()));
     }
+
+    // Nonce challenge: consume → verify Ed25519 signature
+    nonces.consume(&body.nonce)?;
+    let challenge = format!("register:{}:{}", username, body.nonce);
+    let valid = crypto::verify_signature(pk, challenge.as_bytes(), &body.signature)
+        .map_err(|e| ApiError::BadRequest(e))?;
+    if !valid {
+        return Err(ApiError::Forbidden("Invalid identity signature".into()));
+    }
+
     if store.username_index.contains_key(&username) {
         return Err(ApiError::Conflict("Username already taken".into()));
     }
+    if store.pubkey_index.contains_key(pk) {
+        return Err(ApiError::Conflict("Public key already registered".into()));
+    }
 
     let id = Uuid::new_v4().to_string();
-    let pw_hash = password::hash_password(&body.password)
-        .map_err(|e| ApiError::Internal(e))?;
     let now_ms = epoch_ms();
 
     let record = UserRecord {
         id: id.clone(),
         username: username.clone(),
         display_name: body.display_name.trim().to_string(),
-        password_hash: pw_hash,
+        password_hash: None,
         avatar: None,
-        public_key: body.public_key,
+        public_key: Some(pk.to_string()),
         created_at_ms: now_ms,
     };
 
     let profile = UserProfile::from(&record);
     store.username_index.insert(username, id.clone());
-    if let Some(ref pk) = record.public_key {
-        store.pubkey_index.insert(pk.clone(), id.clone());
-    }
+    store.pubkey_index.insert(pk.to_string(), id.clone());
     store.users.insert(id.clone(), record);
     store.mark_dirty();
 
@@ -76,11 +91,13 @@ async fn register(
 }
 
 /// POST /api/auth/login
+/// Password-free — the server identifies the user by `public_key` via
+/// `pubkey_index` and verifies ownership through Ed25519 nonce challenge.
 async fn login(
     State(store): State<Store>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Extension(fraud): Extension<FraudState>,
-    Extension(registry): Extension<ServerRegistry>,
+    Extension(nonces): Extension<NonceStore>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Negotiated, ApiError> {
@@ -88,74 +105,33 @@ async fn login(
     let body: LoginBody = decode_body(&headers, &body)?;
     let ip = addr.ip().to_string();
 
-    // Check if IP is already banned
     if fraud.bans.is_banned(&ip) {
         return Err(ApiError::Forbidden("Access denied".into()));
     }
 
-    let username = body.username.trim().to_lowercase();
+    let pk = &body.public_key;
+    if pk.is_empty() {
+        return Err(ApiError::BadRequest("public_key is required".into()));
+    }
+
+    // Nonce challenge: consume → verify Ed25519 signature
+    nonces.consume(&body.nonce)?;
+    let challenge = format!("login:{}:{}", pk, body.nonce);
+    let valid = crypto::verify_signature(pk, challenge.as_bytes(), &body.signature)
+        .map_err(|e| ApiError::BadRequest(e))?;
+    if !valid {
+        return Err(ApiError::Forbidden("Invalid identity signature".into()));
+    }
 
     let user_id = store
-        .username_index
-        .get(&username)
+        .pubkey_index
+        .get(pk.as_str())
         .map(|r| r.value().clone())
         .ok_or_else(|| {
             fraud.detector.record_login_fail(&ip, &fraud.bans);
-            ApiError::Unauthorized("Invalid credentials".into())
+            ApiError::Unauthorized("Unknown public key — register first".into())
         })?;
 
-    let record = store
-        .users
-        .get(&user_id)
-        .ok_or_else(|| ApiError::Unauthorized("Invalid credentials".into()))?;
-
-    if !password::verify_password(&body.password, &record.password_hash) {
-        fraud.detector.record_login_fail(&ip, &fraud.bans);
-        return Err(ApiError::Unauthorized("Invalid credentials".into()));
-    }
-    drop(record);
-
-    // Sync the Ed25519 public key if the client provides one
-    if let Some(ref new_pk) = body.public_key {
-        if let Some(mut rec) = store.users.get_mut(&user_id) {
-            if rec.public_key.as_ref() != Some(new_pk) {
-                let old_pk = rec.public_key.clone();
-                let new_pk_owned = new_pk.clone();
-
-                tracing::info!(
-                    "login: pk changed for user={} old={:?} new={}…",
-                    username,
-                    old_pk.as_deref().map(|s| &s[..s.len().min(12)]),
-                    &new_pk_owned[..new_pk_owned.len().min(12)]
-                );
-
-                // Update auth store indexes
-                if let Some(ref opk) = old_pk {
-                    store.pubkey_index.remove(opk);
-                }
-                store.pubkey_index.insert(new_pk_owned.clone(), user_id.clone());
-                rec.public_key = Some(new_pk_owned.clone());
-                store.mark_dirty();
-                drop(rec);
-
-                // Migrate server memberships from old pk → new pk
-                if let Some(ref opk) = old_pk {
-                    migrate_server_memberships(&registry, opk, &new_pk_owned);
-                }
-            } else {
-                tracing::debug!(
-                    "login: pk unchanged for user={} pk={}…",
-                    username,
-                    &new_pk[..new_pk.len().min(12)]
-                );
-            }
-        }
-    } else {
-        tracing::warn!(
-            "login: no public_key in request body for user={}",
-            username
-        );
-    }
 
     let profile = store
         .users
@@ -183,6 +159,7 @@ async fn me(
 /// PATCH /api/auth/me
 async fn update_profile(
     State(store): State<Store>,
+    Extension(registry): Extension<ServerRegistry>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Result<Negotiated, ApiError> {
@@ -200,6 +177,36 @@ async fn update_profile(
     }
     if let Some(avatar) = body.avatar {
         record.avatar = Some(avatar);
+    }
+
+    // Sync Ed25519 public key when the client provides a newer one
+    if let Some(ref new_pk) = body.public_key {
+        if record.public_key.as_ref() != Some(new_pk) {
+            let old_pk = record.public_key.clone();
+            let new_pk_owned = new_pk.clone();
+
+            tracing::info!(
+                "update_profile: pk sync for user={} old={:?} new={}…",
+                record.username,
+                old_pk.as_deref().map(|s| &s[..s.len().min(12)]),
+                &new_pk_owned[..new_pk_owned.len().min(12)]
+            );
+
+            if let Some(ref opk) = old_pk {
+                store.pubkey_index.remove(opk);
+            }
+            store.pubkey_index.insert(new_pk_owned.clone(), auth.user_id.clone());
+            record.public_key = Some(new_pk_owned.clone());
+            let profile = UserProfile::from(&*record);
+            drop(record);
+            store.mark_dirty();
+
+            if let Some(ref opk) = old_pk {
+                migrate_server_memberships(&registry, opk, &new_pk_owned);
+            }
+
+            return Ok(negotiate(profile, proto));
+        }
     }
 
     let profile = UserProfile::from(&*record);
