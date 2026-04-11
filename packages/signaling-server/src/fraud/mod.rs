@@ -24,7 +24,7 @@ pub struct FraudState {
 /// Axum middleware that rejects requests from banned IPs.
 pub async fn ip_guard(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    state: axum::extract::Extension<FraudState>,
+    axum::extract::Extension(state): axum::extract::Extension<FraudState>,
     req: Request<Body>,
     next: Next,
 ) -> Response {

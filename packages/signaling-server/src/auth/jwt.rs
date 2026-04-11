@@ -4,10 +4,18 @@ use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode}
 use crate::models::Claims;
 
 /// JWT secret cached at process start — avoids env-var lookup + heap allocation per call.
+/// Panics in production if JWT_SECRET is not set or empty.
 static JWT_SECRET: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    std::env::var("JWT_SECRET")
-        .unwrap_or_else(|_| "dev-secret-change-in-prod".into())
-        .into_bytes()
+    match std::env::var("JWT_SECRET") {
+        Ok(s) if !s.is_empty() => s.into_bytes(),
+        _ => {
+            if cfg!(test) || std::env::var("DEV_MODE").is_ok() {
+                "dev-secret-do-not-use-in-prod".as_bytes().to_vec()
+            } else {
+                panic!("JWT_SECRET environment variable must be set in production")
+            }
+        }
+    }
 });
 
 /// Creates a signed JWT valid for 7 days.
