@@ -1,4 +1,4 @@
-mod identity;
+pub mod identity;
 
 use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
@@ -345,4 +345,122 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ──────────────────── min_sizes_for ──────────────────────
+
+    #[test]
+    fn min_sizes_for_compact_bars() {
+        assert_eq!(min_sizes_for("friends-bar"), (48.0, 48.0));
+        assert_eq!(min_sizes_for("server-bar"), (48.0, 48.0));
+    }
+
+    #[test]
+    fn min_sizes_for_default_panels() {
+        assert_eq!(min_sizes_for("sidebar"), (MIN_W_PX, MIN_H_PX));
+        assert_eq!(min_sizes_for("channel-panel"), (MIN_W_PX, MIN_H_PX));
+        assert_eq!(min_sizes_for("unknown-widget"), (MIN_W_PX, MIN_H_PX));
+    }
+
+    // ──────────────────── default_layout ─────────────────────
+
+    #[test]
+    fn default_layout_contains_all_panels() {
+        let layout = default_layout();
+        let expected = ["sidebar", "channel-panel", "chat-panel", "friends-bar", "server-bar"];
+        for id in &expected {
+            assert!(layout.contains_key(*id), "missing panel: {id}");
+        }
+        assert_eq!(layout.len(), expected.len());
+    }
+
+    #[test]
+    fn default_layout_fractions_in_range() {
+        for (_, w) in default_layout() {
+            assert!(w.x >= 0.0 && w.x <= 1.0, "{}: x={}", w.id, w.x);
+            assert!(w.y >= 0.0 && w.y <= 1.0, "{}: y={}", w.id, w.y);
+            assert!(w.w > 0.0 && w.w <= 1.0, "{}: w={}", w.id, w.w);
+            assert!(w.h > 0.0 && w.h <= 1.0, "{}: h={}", w.id, w.h);
+        }
+    }
+
+    #[test]
+    fn default_layout_ids_match_keys() {
+        for (key, w) in default_layout() {
+            assert_eq!(key, w.id, "key/id mismatch for {key}");
+        }
+    }
+
+    // ─────────────── is_legacy_pixel_layout ──────────────────
+
+    #[test]
+    fn legacy_detection_pixel_values() {
+        let mut map = HashMap::new();
+        map.insert("a".into(), LayoutWindow { id: "a".into(), x: 120.0, y: 80.0, w: 400.0, h: 300.0, z: 0 });
+        assert!(is_legacy_pixel_layout(&map));
+    }
+
+    #[test]
+    fn legacy_detection_fraction_values() {
+        let mut map = HashMap::new();
+        map.insert("a".into(), LayoutWindow { id: "a".into(), x: 0.1, y: 0.2, w: 0.5, h: 0.6, z: 0 });
+        assert!(!is_legacy_pixel_layout(&map));
+    }
+
+    #[test]
+    fn legacy_detection_boundary_value() {
+        let mut map = HashMap::new();
+        map.insert("a".into(), LayoutWindow { id: "a".into(), x: 2.0, y: 0.0, w: 0.5, h: 0.5, z: 0 });
+        assert!(!is_legacy_pixel_layout(&map), "2.0 is the boundary, not legacy");
+    }
+
+    #[test]
+    fn legacy_detection_just_above_boundary() {
+        let mut map = HashMap::new();
+        map.insert("a".into(), LayoutWindow { id: "a".into(), x: 2.01, y: 0.0, w: 0.5, h: 0.5, z: 0 });
+        assert!(is_legacy_pixel_layout(&map));
+    }
+
+    #[test]
+    fn legacy_detection_empty_map() {
+        assert!(!is_legacy_pixel_layout(&HashMap::new()));
+    }
+
+    #[test]
+    fn legacy_detection_mixed_panels() {
+        let mut map = HashMap::new();
+        map.insert("a".into(), LayoutWindow { id: "a".into(), x: 0.1, y: 0.2, w: 0.3, h: 0.4, z: 0 });
+        map.insert("b".into(), LayoutWindow { id: "b".into(), x: 500.0, y: 0.0, w: 0.3, h: 0.4, z: 0 });
+        assert!(is_legacy_pixel_layout(&map), "one pixel-based panel should flag the whole layout");
+    }
+
+    // ──────────────────── get_dsp_token ──────────────────────
+
+    #[test]
+    fn dsp_token_deterministic() {
+        assert_eq!(get_dsp_token(), get_dsp_token());
+    }
+
+    #[test]
+    fn dsp_token_nonzero() {
+        assert_ne!(get_dsp_token(), 0);
+    }
+
+    // ──────────────────── LayoutBatch ────────────────────────
+
+    #[test]
+    fn layout_batch_serialization() {
+        let batch = LayoutBatch {
+            windows: vec![
+                LayoutWindow { id: "a".into(), x: 0.0, y: 0.0, w: 0.5, h: 0.5, z: 1 },
+            ],
+        };
+        let json = serde_json::to_string(&batch).unwrap();
+        assert!(json.contains("\"windows\""));
+        assert!(json.contains("\"a\""));
+    }
 }

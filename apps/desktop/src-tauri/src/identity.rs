@@ -459,3 +459,120 @@ fn epoch_now() -> u64 {
         .unwrap_or_default()
         .as_secs()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ──────────────── hash / verify password ─────────────────
+
+    #[test]
+    fn hash_and_verify_password_success() {
+        let hash = hash_password("test-password").unwrap();
+        assert!(hash.starts_with("$argon2"));
+        assert!(verify_password("test-password", &hash).unwrap());
+    }
+
+    #[test]
+    fn verify_password_wrong_input() {
+        let hash = hash_password("correct").unwrap();
+        assert!(!verify_password("wrong", &hash).unwrap());
+    }
+
+    #[test]
+    fn verify_password_invalid_hash_format() {
+        assert!(verify_password("pwd", "not-a-valid-hash").is_err());
+    }
+
+    #[test]
+    fn hash_password_unique_salts() {
+        let h1 = hash_password("same").unwrap();
+        let h2 = hash_password("same").unwrap();
+        assert_ne!(h1, h2, "different salts should produce different hashes");
+    }
+
+    #[test]
+    fn hash_password_empty_string() {
+        let hash = hash_password("").unwrap();
+        assert!(verify_password("", &hash).unwrap());
+        assert!(!verify_password("notempty", &hash).unwrap());
+    }
+
+    // ──────────────────── epoch_now ──────────────────────────
+
+    #[test]
+    fn epoch_now_after_2024() {
+        assert!(epoch_now() > 1_704_067_200);
+    }
+
+    #[test]
+    fn epoch_now_monotonic() {
+        let t1 = epoch_now();
+        let t2 = epoch_now();
+        assert!(t2 >= t1);
+    }
+
+    // ─────────────── IdentityMeta defaults ──────────────────
+
+    #[test]
+    fn identity_meta_empty_pseudo() {
+        let meta = IdentityMeta {
+            timestamp: 0,
+            public_key: String::new(),
+            pseudo: String::new(),
+            password_hash: String::new(),
+            avatar: None,
+        };
+        let public = IdentityMetaPublic::from(&meta);
+        assert_eq!(public.pseudo, "");
+    }
+
+    #[test]
+    fn identity_meta_public_clone_independence() {
+        let meta = IdentityMeta {
+            timestamp: 10,
+            public_key: "pk".into(),
+            pseudo: "name".into(),
+            password_hash: "hash".into(),
+            avatar: Some("av".into()),
+        };
+        let p1 = IdentityMetaPublic::from(&meta);
+        let p2 = IdentityMetaPublic::from(&meta);
+        assert_eq!(p1.public_key, p2.public_key);
+        assert_eq!(p1.avatar, p2.avatar);
+    }
+
+    // ─────────────── IdentityCache basic ────────────────────
+
+    #[test]
+    fn identity_cache_starts_empty() {
+        let cache = IdentityCache(Mutex::new(HashMap::new()));
+        let map = cache.0.lock().unwrap();
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn identity_cache_insert_and_retrieve() {
+        let cache = IdentityCache(Mutex::new(HashMap::new()));
+        {
+            let mut map = cache.0.lock().unwrap();
+            map.insert("pk1".into(), IdentityMeta {
+                timestamp: 1,
+                public_key: "pk1".into(),
+                pseudo: "Alice".into(),
+                password_hash: String::new(),
+                avatar: None,
+            });
+        }
+        let map = cache.0.lock().unwrap();
+        assert_eq!(map.len(), 1);
+        assert_eq!(map.get("pk1").unwrap().pseudo, "Alice");
+    }
+
+    // ──────────── MAX_AVATAR_SIZE constant ──────────────────
+
+    #[test]
+    fn max_avatar_size_is_512kb() {
+        assert_eq!(MAX_AVATAR_SIZE, 512 * 1024);
+    }
+}

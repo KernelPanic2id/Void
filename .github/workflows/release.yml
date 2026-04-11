@@ -6,13 +6,69 @@ on:
       - 'v*'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-test-
+
+      - name: Run Tauri/Desktop Rust tests
+        run: cargo test -p desktop --verbose
+
+      - name: Run core-wasm Rust tests
+        run: cargo test -p core-wasm --verbose
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run frontend tests (Vitest)
+        run: pnpm --filter desktop test:run
+
   publish-tauri:
+    needs: test
     permissions:
-      contents: write # Obligatoire pour créer la release
+      contents: write
     strategy:
       fail-fast: false
       matrix:
-        platform: [ windows-latest ]
+        include:
+          - platform: ubuntu-22.04
+            args: ''
+            rust-targets: ''
+          - platform: windows-latest
+            args: ''
+            rust-targets: ''
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+            rust-targets: 'aarch64-apple-darwin,x86_64-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -24,17 +80,34 @@ jobs:
           node-version: lts/*
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 9
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
 
       - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+        run: cargo install wasm-pack
 
       - name: Build WASM package
         run: |
@@ -50,16 +123,13 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # Injection de l'URL de signaling pour le build final
           VITE_SIGNALING_URL: ${{ secrets.VITE_SIGNALING_URL }}
         with:
           tagName: v__VERSION__
-          releaseName: "DiscordWASM v__VERSION__"
-          releaseBody: "Mise à jour automatique incluant le JSON."
+          releaseName: "Void v__VERSION__"
+          releaseBody: "Mise à jour automatique."
           releaseDraft: false
           prerelease: false
           projectPath: ./apps/desktop
-          # Force la génération du JSON de l'updater
           includeUpdaterJson: true
-          # On ajoute l'argument de build pour être sûr que Tauri signe le tout
-          args: --verbose
+          args: ${{ matrix.args }}
