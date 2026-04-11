@@ -1,9 +1,11 @@
 /// <reference types="vitest" />
 import { defineConfig, Plugin } from 'vitest/config';
 import react from '@vitejs/plugin-react';
-import path from 'path';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
-const wasmMock = path.resolve(__dirname, 'src/__mocks__/pkg/core_wasm.ts');
+const configDir = path.dirname(fileURLToPath(import.meta.url));
+const wasmMock = path.resolve(configDir, 'src/__mocks__/pkg/core_wasm.ts');
 
 /** Pre-resolves WASM imports to the test mock before vite:import-analysis. */
 function wasmMockPlugin(): Plugin {
