@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import VoiceAudioRendererProps from '../../models/voiceAudioRendererProps.model';
+import VoiceAudioRendererProps from '../../models/voice/voiceAudioRendererProps.model';
 import { useVoiceStore } from '../../context/VoiceContext';
 
 export const VoiceAudioRenderer = ({ stream, muted, peerId }: VoiceAudioRendererProps & { peerId: string }) => {
@@ -31,6 +31,13 @@ export const VoiceAudioRenderer = ({ stream, muted, peerId }: VoiceAudioRenderer
         };
 
         playAudio();
+
+        const selectedSpeaker = localStorage.getItem('selectedSpeaker');
+        if (selectedSpeaker && 'setSinkId' in audio) {
+            (audio as any).setSinkId(selectedSpeaker).catch((err: any) => {
+                console.warn("Impossible de changer le périphérique de sortie audio:", err);
+            });
+        }
     }, [stream, muted, volume]);
 
     return (

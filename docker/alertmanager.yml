@@ -15,6 +15,14 @@ route:
   repeat_interval: 4h
   routes:
     - match:
+        alertname: FraudIPBanned
+      receiver: 'slack-fraud'
+      continue: false
+    - match:
+        alertname: HighBlockedRequests
+      receiver: 'slack-fraud'
+      continue: false
+    - match:
         severity: critical
       receiver: 'slack-critical'
       continue: true
@@ -84,4 +92,25 @@ receivers:
         text: |
           {{ range .Alerts }}
           *Alert:* {{ .Annotations.summary }}
+          {{ end }}
+
+  - name: 'slack-fraud'
+    slack_configs:
+      - channel: '#fraud-alerts'
+        send_resolved: true
+        title: '🚨 [{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}'
+        color: '{{ if eq .Status "firing" }}danger{{ else }}good{{ end }}'
+        pretext: 'Fraud / Piracy Alert — Void'
+        fields:
+          - title: 'Alert'
+            value: '{{ .GroupLabels.alertname }}'
+            short: true
+          - title: 'Severity'
+            value: '{{ .GroupLabels.severity }}'
+            short: true
+        text: |
+          {{ range .Alerts }}
+          *Summary:* {{ .Annotations.summary }}
+          *Description:* {{ .Annotations.description }}
+          *Started:* {{ .StartsAt }}
           {{ end }}

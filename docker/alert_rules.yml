@@ -45,3 +45,76 @@ groups:
         annotations:
           summary: "Backend Signaling Server indisponible"
           description: "Le backend signaling-server est down depuis plus de 1 minute"
+
+      - alert: FraudIPBanned
+        expr: increase(fraud_ip_banned_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fraud: IP banned"
+          description: "{{ $value }} IP(s) banned in the last 5 minutes for suspicious activity"
+
+      - alert: HighFraudAttempts
+        expr: rate(fraud_attempts_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High fraud attempt rate"
+          description: "Fraud attempts rate is {{ $value }}/s (type: {{ $labels.type }})"
+
+      - alert: HighBlockedRequests
+        expr: rate(fraud_blocked_requests_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High rate of blocked requests from banned IPs"
+          description: "{{ $value }} blocked requests/s — potential ongoing attack"
+
+      - alert: PermanentBanEscalation
+        expr: increase(fraud_permanent_bans_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Permanent ban escalation (recidivism)"
+          description: "{{ $value }} IP(s) permanently banned in the last hour due to repeated offenses"
+
+      - alert: FingerprintAbuse
+        expr: increase(fraud_fingerprint_bans_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Fingerprint abuse detected"
+          description: "{{ $value }} IP(s) banned in the last hour — same device fingerprint across multiple IPs"
+
+      - alert: HighWsQueueDrops
+        expr: rate(sfu_ws_queue_dropped_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket messages being dropped"
+          description: "{{ $value }} WS messages/s dropped — peer connections may be overloaded"
+
+      - alert: HighRtpPacketDrops
+        expr: rate(sfu_rtp_packets_dropped_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "RTP packets being dropped at high rate"
+          description: "{{ $value }} RTP packets/s dropped — audio quality severely degraded"
+
+      - alert: HighDestinationTracks
+        expr: sfu_destination_tracks > 500
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High O(N²) forwarding load"
+          description: "{{ $value }} destination tracks active — quadratic scaling may cause issues"
+

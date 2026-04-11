@@ -6,6 +6,11 @@ members = [
 ]
 resolver = "2"
 
+[workspace.package]
+license = "BUSL-1.1"
+authors = ["Raphael Taibi"]
+repository = "https://github.com/RaphaelTaibi/Void"
+
 [profile.release]
 lto = true
 opt-level = "z"

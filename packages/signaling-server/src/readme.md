@@ -1,534 +1,440 @@
-# 🎙️ Vocal-WASM-SFU - Signaling Server Backend
+# Void — Signaling Server
 
-Serveur de signalisation WebRTC haute performance écrit en Rust pour des communications audio/vidéo en temps réel.
+High-performance WebRTC signaling server and SFU (Selective Forwarding Unit) written in **Rust** with **Axum**, **Tokio**, and **webrtc-rs**.
 
-![Rust](https://img.shields.io/badge/Rust-1.70+-orange)
-![WebRTC](https://img.shields.io/badge/WebRTC-SFU-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
 
----
+## Architecture
 
-## 📋 Table des Matières
+```mermaid
+graph TB
+    subgraph "Signaling Server (Rust)"
+        MAIN["main.rs<br/>Axum router · TLS setup"]
+        
+        subgraph "SFU Module"
+            HANDLER["handler.rs<br/>WebSocket lifecycle"]
+            NEGOT["negotiation.rs<br/>PeerConnection · SDP · ICE<br/>ForwarderState · JitterBuffer"]
+            BCAST["broadcast.rs<br/>Channel broadcast · Peer cleanup"]
+            STATE["state.rs<br/>AppState · PeerSession<br/>ChannelState · ForwarderState"]
+            MODELS_SFU["models.rs<br/>ClientMessage · ServerMessage<br/>ServerRegistry (JSON)"]
+        end
 
-- [Architecture](#architecture)
-- [Fonctionnalités](#fonctionnalités)
-- [Prérequis](#prérequis)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Déploiement](#déploiement)
-- [Monitoring](#monitoring)
-- [API WebSocket](#api-websocket)
-- [Sécurité](#sécurité)
-- [Performance](#performance)
-- [Dépannage](#dépannage)
-- [Ressources](#ressources)
+        subgraph "Auth Module"
+            AUTH_MOD["mod.rs<br/>Routes: register · login · me · search"]
+            JWT["jwt.rs<br/>HS256 · 7-day expiry"]
+            MW["middleware.rs<br/>Bearer token extraction"]
+            PWD["password.rs<br/>Argon2id hash/verify"]
+        end
 
----
+        subgraph "Friends Module"
+            FRIENDS["mod.rs<br/>list · send · pending<br/>accept · reject · remove"]
+        end
 
-# 🏗️ Architecture
-![img.png](img.png)
----
+        STORE["store.rs<br/>DashMap in-memory store<br/>Protobuf serialization → .bin<br/>Background flush with debounce"]
+        METRICS["metrics.rs<br/>Prometheus gauges<br/>Active peers · channels · bandwidth"]
+        NEG["negotiate.rs<br/>Content negotiation<br/>JSON ↔ Protobuf"]
+        ERRORS["errors.rs<br/>ApiError → HTTP status"]
+        MODELS_ROOT["models.rs<br/>prost::Message structs<br/>(synced with core-wasm)"]
+    end
 
-# ✨ Fonctionnalités
+    CLIENT["Client (WebSocket)"] --> HANDLER
+    CLIENT -- "HTTP REST" --> AUTH_MOD
+    CLIENT -- "HTTP REST" --> FRIENDS
+    HANDLER --> NEGOT --> STATE
+    HANDLER --> BCAST
+    AUTH_MOD --> JWT & PWD
+    AUTH_MOD & FRIENDS --> STORE
+    STORE --> MODELS_ROOT
+    MAIN --> METRICS
+```
 
-| Fonctionnalité | Description |
-|----------------|-------------|
-| **Signalisation WebRTC** | Échange d'offres/answers SDP et candidats ICE |
-| **SFU (Selective Forwarding Unit)** | Routage intelligent des flux média entre pairs |
-| **Salons Multiples** | Support de plusieurs salons avec isolation |
-| **Chat en Temps Réel** | Messagerie texte intégrée |
-| **État Média** | Mute/Deafen en temps réel |
-| **Monitoring Prometheus** | Métriques exposées sur `/metrics` |
-| **TLS Natif** | Chiffrement via axum-server (rustls) |
-| **Certificate Pinning** | Sécurité renforcée avec empreinte cert |
-| **Jitter Buffer** | Lissage des paquets RTP (30ms) |
-| **Catch-up Optimisé** | Rejoindre un salon en cours |
+## Features
 
----
+| Feature | Description |
+|---|---|
+| **SFU WebRTC** | Server-side PeerConnection via webrtc-rs, track forwarding |
+| **JitterBuffer** | 30ms buffer at 48kHz for smooth RTP packet delivery |
+| **Track Forwarding** | `ForwarderState` relays RTP packets between peers |
+| **Catch-up** | Late joiners receive a single SDP offer with all existing tracks |
+| **Auth** | Registration/login with Argon2id, JWT HS256 (7-day expiry) |
+| **Friends** | Full CRUD: send/accept/reject requests, list/remove friends |
+| **Content Negotiation** | Automatic JSON ↔ Protobuf based on `Accept`/`Content-Type` headers |
+| **Protobuf Store** | In-memory DashMap, serialized to `.bin` via prost, background flush |
+| **Prometheus Metrics** | Active peers, channels, bandwidth (ingress/egress) |
+| **TLS** | Production: rustls with cert/key PEM files |
+| **Real-time Chat** | WebSocket-based text messaging per channel |
+| **Media State** | Mute/deafen broadcast in real-time |
 
-# 📦 Prérequis
+## WebSocket Protocol
 
-### Système
+### Client → Server
 
-- **Architecture** : ARM64 (Aarch64) ou x86_64
-- **OS** : Ubuntu 22.04 LTS ou supérieur
-- **RAM** : Minimum 4GB (recommandé : 8GB+)
-- **CPU** : 4 cœurs minimum
+```mermaid
+classDiagram
+    class ClientMessage {
+        <<enum>>
+        Join(channelId, userId, username)
+        Leave(channelId, userId)
+        Offer(sdp)
+        Answer(sdp)
+        Ice(candidate)
+        MediaState(isMuted, isDeafened)
+        Chat(channelId, from, username, message, timestamp)
+    }
+```
 
-### Dépendances
+### Server → Client
+
+```mermaid
+classDiagram
+    class ServerMessage {
+        <<enum>>
+        Joined(channelId, peers[], startedAt)
+        PeerJoined(userId, username)
+        PeerLeft(userId)
+        Offer(sdp)
+        Answer(sdp)
+        Ice(candidate)
+        TrackMap(userId, trackId, streamId, kind)
+        MediaState(userId, isMuted, isDeafened)
+        Chat(channelId, from, username, message, timestamp)
+        Stats(userId, bandwidthBps)
+        Error(message)
+    }
+```
+
+## SFU Flow
+
+```mermaid
+sequenceDiagram
+    participant A as Peer A
+    participant WS as WebSocket Handler
+    participant SFU as SFU Negotiation
+    participant PC as PeerConnection (webrtc-rs)
+    participant B as Peer B
+
+    A->>WS: Join { channelId, userId }
+    WS-->>A: Joined { peers, startedAt }
+
+    A->>WS: Offer { sdp }
+    WS->>SFU: create_or_update_peer_connection()
+    SFU->>PC: new PeerConnection + set remote SDP
+    PC-->>SFU: SDP Answer
+    SFU-->>A: Answer { sdp }
+
+    A->>WS: Ice { candidate }
+    SFU->>PC: add_ice_candidate()
+
+    Note over PC: on_track → ForwarderState created
+    SFU-->>A: TrackMap { trackId, kind }
+    SFU-->>B: TrackMap { userId: A, trackId, kind }
+
+    Note over SFU: ForwarderState + JitterBuffer (30ms)<br/>relays RTP from A → B
+```
+
+## REST API
+
+### Auth (`/api/auth/`)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/register` | — | Create account (username, password, display_name) |
+| POST | `/login` | — | Login, returns JWT + UserProfile |
+| GET | `/me` | Bearer | Get current user profile |
+| PUT | `/me` | Bearer | Update display_name / avatar |
+| GET | `/search?q=` | Bearer | Search users by username |
+
+### Friends (`/api/friends/`)
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/` | Bearer | List all friends |
+| POST | `/request` | Bearer | Send friend request |
+| GET | `/pending` | Bearer | List pending requests |
+| POST | `/accept` | Bearer | Accept a friend request |
+| POST | `/reject` | Bearer | Reject a friend request |
+| DELETE | `/:id` | Bearer | Remove a friend |
+
+All endpoints support **protobuf** (`application/x-protobuf`) and **JSON** content negotiation.
+
+## Prometheus Metrics
+
+| Metric | Type | Description |
+|---|---|---|
+| `sfu_active_peers` | Gauge | Connected peers count |
+| `sfu_active_channels` | Gauge | Active channels count |
+| `sfu_bandwidth_egress_bps` | Gauge | Outbound bandwidth (bits/s) |
+| `sfu_bandwidth_ingress_bps` | Gauge | Inbound bandwidth (bits/s) |
+| `sfu_packets_per_second` | Histogram | RTP packets per second |
+
+Endpoints: `GET /metrics`, `GET /health`
+
+## Configuration
 
 ```bash
-# Installer Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-source $HOME/.cargo/env
-
-# Installer les dépendances système
-sudo apt update && sudo apt install -y build-essential pkg-config libssl-dev
-
-# Installer Docker (optionnel)
-curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
-sudo usermod -aG docker $USER
+# .env
+RUST_LOG=info    # Log level: debug, info, warn, error
+DEV_MODE=1       # Set for HTTP-only dev mode (no TLS)
 ```
 
-# **🚀 Installation**
+| Port | Protocol | Description |
+|---|---|---|
+| 3001 | TCP | HTTPS/WSS (Signaling + REST API) |
+| 10000-20000 | UDP | WebRTC RTP/RTCP media |
 
-## **1. Cloner le Repository**
+## Build & Run
 
-```bash 
-   git clone https://github.com/ton-utilisateur/discord-wasm-sfu.git
-   cd discord-wasm-sfu/packages/signaling-server
+```bash
+# Development (HTTP, no TLS)
+DEV_MODE=1 cargo run
+
+# Production (TLS required)
+cargo build --release
+./target/release/signaling-server
+
+# ARM64 cross-compile
+cargo build --release --target aarch64-unknown-linux-gnu
 ```
 
-## **2. Générer les Certificats TLS**
+### TLS Certificates
 
 ```bash
 openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem \
-  -sha256 -days 365 -nodes -subj \
-  "/C=FR/ST=PACA/L=LaGarde/O=VocalWASM/CN=_ip_publique"
+  -sha256 -days 365 -nodes -subj "/C=FR/ST=PACA/L=LaGarde/O=Void/CN=<public_ip>"
 ```
-## **3. Compiler le Binaire**
+
+## Docker
+
 ```bash
-# Mode développement
-cargo build
+docker compose up -d --build
+docker compose logs -f signaling-server
+```
 
-# Mode production (optimisé)
+## File Structure
+
+```
+packages/signaling-server/
+├── Cargo.toml
+├── src/
+│   ├── main.rs           # Axum setup, TLS, routes
+│   ├── models.rs         # Protobuf message types (prost, synced with core-wasm)
+│   ├── store.rs          # DashMap store + protobuf persistence
+│   ├── negotiate.rs      # JSON ↔ Protobuf content negotiation
+│   ├── metrics.rs        # Prometheus metrics + stats broadcaster
+│   ├── errors.rs         # ApiError enum → HTTP responses
+│   ├── auth/
+│   │   ├── mod.rs        # Auth routes (register, login, me, search)
+│   │   ├── jwt.rs        # JWT HS256 sign/verify
+│   │   ├── middleware.rs # Bearer token extractor
+│   │   └── password.rs   # Argon2id hash/verify
+│   ├── friends/
+│   │   └── mod.rs        # Friends CRUD routes
+│   └── sfu/
+│       ├── handler.rs    # WebSocket handler (message dispatch)
+│       ├── negotiation.rs# PeerConnection, SDP, ICE, forwarders
+│       ├── broadcast.rs  # Channel broadcast + peer cleanup
+│       ├── models.rs     # WS protocol types (ClientMessage/ServerMessage)
+│       └── state.rs      # AppState, PeerSession, ChannelState, JitterBuffer
+```
+
+## Dependencies
+
+| Crate | Role |
+|---|---|
+| `axum` | HTTP/WebSocket framework |
+| `tokio` | Async runtime |
+| `webrtc` | WebRTC SFU (PeerConnection, RTP, ICE) |
+| `prost` | Protobuf encode/decode |
+| `dashmap` | Concurrent in-memory store |
+| `argon2` | Password hashing |
+| `jsonwebtoken` | JWT sign/verify |
+| `prometheus` | Metrics exposition |
+| `rustls` / `axum-server` | TLS termination |
+
+## Security
+
+| Layer | Protection |
+|---|---|
+| **Transport** | TLS 1.3 (rustls, AES-256) |
+| **Media** | DTLS/SRTP for all WebRTC tracks |
+| **Auth** | Argon2id password hashing, JWT Bearer |
+| **Memory** | Rust memory safety — no buffer overflows |
+
+## License
+
+**BSL-1.1** — See [LICENSE](../../LICENSE).
+
+---
+
+# Void — Serveur de Signalisation (FR)
+
+Serveur de signalisation WebRTC et SFU (Selective Forwarding Unit) haute performance écrit en **Rust** avec **Axum**, **Tokio** et **webrtc-rs**.
+
+## Architecture
+
+```mermaid
+graph TB
+    subgraph "Serveur de Signalisation (Rust)"
+        MAIN["main.rs<br/>Routeur Axum · Setup TLS"]
+
+        subgraph "Module SFU"
+            HANDLER["handler.rs<br/>Cycle de vie WebSocket"]
+            NEGOT["negotiation.rs<br/>PeerConnection · SDP · ICE<br/>ForwarderState · JitterBuffer"]
+            BCAST["broadcast.rs<br/>Broadcast canal · Nettoyage pairs"]
+            STATE["state.rs<br/>AppState · PeerSession<br/>ChannelState · ForwarderState"]
+        end
+
+        subgraph "Module Auth"
+            AUTH_MOD["mod.rs<br/>Routes: register · login · me · search"]
+            JWT["jwt.rs<br/>HS256 · Expiration 7 jours"]
+            PWD["password.rs<br/>Hash/vérification Argon2id"]
+        end
+
+        subgraph "Module Amis"
+            FRIENDS["mod.rs<br/>list · send · pending<br/>accept · reject · remove"]
+        end
+
+        STORE["store.rs<br/>Store DashMap en mémoire<br/>Sérialisation Protobuf → .bin"]
+        METRICS["metrics.rs<br/>Gauges Prometheus<br/>Pairs · Canaux · Bande passante"]
+    end
+
+    CLIENT["Client (WebSocket)"] --> HANDLER
+    CLIENT -- "REST HTTP" --> AUTH_MOD
+    CLIENT -- "REST HTTP" --> FRIENDS
+    HANDLER --> NEGOT --> STATE
+    AUTH_MOD --> STORE
+    FRIENDS --> STORE
+    MAIN --> METRICS
+```
+
+## Fonctionnalités
+
+| Fonctionnalité | Description |
+|---|---|
+| **SFU WebRTC** | PeerConnection côté serveur via webrtc-rs, relais de tracks |
+| **JitterBuffer** | Buffer de 30ms à 48kHz pour un acheminement RTP lissé |
+| **Relais de Tracks** | `ForwarderState` relaie les paquets RTP entre pairs |
+| **Catch-up** | Les retardataires reçoivent une seule offre SDP avec tous les tracks |
+| **Auth** | Inscription/connexion Argon2id, JWT HS256 (7 jours) |
+| **Amis** | CRUD complet : envoi/acceptation/rejet, liste/suppression |
+| **Négociation de Contenu** | JSON ↔ Protobuf automatique selon les headers |
+| **Store Protobuf** | DashMap en mémoire, sérialisé en `.bin` via prost |
+| **Métriques Prometheus** | Pairs actifs, canaux, bande passante |
+| **TLS** | Production : rustls avec fichiers PEM cert/key |
+
+## Protocole WebSocket
+
+### Client → Serveur
+
+| Type | Champs | Description |
+|---|---|---|
+| `join` | channelId, userId, username | Rejoindre un canal |
+| `leave` | channelId, userId | Quitter un canal |
+| `offer` | sdp | Offre SDP WebRTC |
+| `answer` | sdp | Réponse SDP |
+| `ice` | candidate | Candidat ICE |
+| `mediaState` | isMuted, isDeafened | État micro/casque |
+| `chat` | channelId, from, message, timestamp | Message texte |
+
+### Serveur → Client
+
+| Type | Champs | Description |
+|---|---|---|
+| `joined` | channelId, peers[], startedAt | Confirmation d'entrée |
+| `peerJoined` | userId, username | Nouveau pair |
+| `peerLeft` | userId | Départ d'un pair |
+| `offer` / `answer` | sdp | Échange SDP |
+| `ice` | candidate | Candidat ICE |
+| `trackMap` | userId, trackId, kind | Mapping des tracks |
+| `mediaState` | userId, isMuted, isDeafened | État média |
+| `stats` | userId, bandwidthBps | Statistiques réseau |
+
+## Flux SFU
+
+```mermaid
+sequenceDiagram
+    participant A as Pair A
+    participant WS as Handler WebSocket
+    participant SFU as Négociation SFU
+    participant PC as PeerConnection (webrtc-rs)
+    participant B as Pair B
+
+    A->>WS: Join { channelId, userId }
+    WS-->>A: Joined { peers, startedAt }
+    A->>WS: Offer { sdp }
+    WS->>SFU: create_or_update_peer_connection()
+    SFU->>PC: Nouveau PeerConnection + set remote SDP
+    PC-->>SFU: SDP Answer
+    SFU-->>A: Answer { sdp }
+    A->>WS: Ice { candidate }
+    SFU->>PC: add_ice_candidate()
+    Note over PC: on_track → ForwarderState créé
+    SFU-->>B: TrackMap { userId: A, trackId, kind }
+    Note over SFU: ForwarderState + JitterBuffer (30ms)<br/>relaie RTP de A → B
+```
+
+## API REST
+
+### Auth (`/api/auth/`)
+
+| Méthode | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/register` | — | Créer un compte |
+| POST | `/login` | — | Connexion → JWT + UserProfile |
+| GET | `/me` | Bearer | Profil de l'utilisateur courant |
+| PUT | `/me` | Bearer | Mise à jour display_name / avatar |
+| GET | `/search?q=` | Bearer | Recherche d'utilisateurs |
+
+### Amis (`/api/friends/`)
+
+| Méthode | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/` | Bearer | Liste des amis |
+| POST | `/request` | Bearer | Envoyer une demande d'ami |
+| GET | `/pending` | Bearer | Liste des demandes en attente |
+| POST | `/accept` | Bearer | Accepter une demande |
+| POST | `/reject` | Bearer | Rejeter une demande |
+| DELETE | `/:id` | Bearer | Supprimer un ami |
+
+## Compilation & Exécution
+
+```bash
+# Développement (HTTP, sans TLS)
+DEV_MODE=1 cargo run
+
+# Production (TLS requis)
 cargo build --release
+./target/release/signaling-server
 
-# Pour ARM64 (Oracle Cloud)
+# Compilation croisée ARM64
 cargo build --release --target aarch64-unknown-linux-gnu
 ```
-## **4. Lancer le Serveur**
-```bash
-# Mode développement
-cargo run
 
-# Mode production
-./target/release/signaling-server
+## Structure des Fichiers
+
+```
+packages/signaling-server/
+├── Cargo.toml
+├── src/
+│   ├── main.rs           # Setup Axum, TLS, routes
+│   ├── models.rs         # Types protobuf (prost, synchronisés avec core-wasm)
+│   ├── store.rs          # Store DashMap + persistance protobuf
+│   ├── negotiate.rs      # Négociation de contenu JSON ↔ Protobuf
+│   ├── metrics.rs        # Métriques Prometheus + broadcaster de stats
+│   ├── errors.rs         # Enum ApiError → réponses HTTP
+│   ├── auth/             # Module d'authentification
+│   ├── friends/          # Module de gestion des amis
+│   └── sfu/              # Module SFU (handler, négociation, broadcast, state)
 ```
 
-# **⚙️ Configuration**
-
-Variables d'Environnement
-```bash
-# Fichier .env
-RUST_LOG=info  # Niveau de log (debug, info, warn, error)
-```
-| Port | Protocole | Description |
-|------|-----------|-------------|
-| 3001 | TCP | HTTPS/WSS (Signalisation) |
-| 10000-20000 | UDP | Flux WebRTC (RTP/RTCP) |
-
-**Configuration Firewall**
-```bash
-# Ouvrir les ports sur la VM
-sudo iptables -I INPUT 1 -p tcp --dport 3001 -j ACCEPT
-sudo iptables -I INPUT 1 -p udp --dport 10000:20000 -j ACCEPT
-sudo netfilter-persistent save
-```
-**Oracle Cloud VCN**
-
-Ajouter les règles d'entrée (Ingress Rules) :
-
-| Protocol | Port Range | Source |
-|----------|------------|--------|
-| TCP | 3001 | 0.0.0.0/0 |
-| UDP | 10000-20000 | 0.0.0.0/0 |
-
-**🐳 Déploiement Docker**
-
-docker-compose.yml
-```yaml
-version: '3.8'
-
-services:
-  signaling-server:
-    build: .
-    ports:
-      - "3001:3001"
-      - "10000-20000:10000-20000/udp"
-    volumes:
-      - ./cert.pem:/cert.pem:ro
-      - ./key.pem:/key.pem:ro
-    environment:
-      - RUST_LOG=info
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:latest
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    networks:
-      - sfu-network
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:latest
-    ports:
-      - "3000:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=Mirage2000
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
-    networks:
-      - sfu-network
-    restart: unless-stopped
-
-  alertmanager:
-    image: prom/alertmanager:latest
-    ports:
-      - "9093:9093"
-    volumes:
-      - ./docker/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-    networks:
-      - sfu-network
-    restart: unless-stopped
-
-  node-exporter:
-    image: prom/node-exporter:latest
-    ports:
-      - "9100:9100"
-    volumes:
-      - /proc:/host/proc:ro
-      - /sys:/host/sys:ro
-    command:
-      - '--path.procfs=/host/proc'
-      - '--path.sysfs=/host/sys'
-    networks:
-      - sfu-network
-    restart: unless-stopped
-
-networks:
-  sfu-network:
-    driver: bridge
-
-volumes:
-  prometheus_data:
-  grafana_data:
-```
-**Lancer avec Docker**
-```bash# Build et démarrage
-docker compose up -d --build
-
-# Voir les logs
-docker compose logs -f signaling-server
-
-# Arrêter les services
-docker compose down
-```
-# **📊 Monitoring**
-
-Métriques Exposées
-
-| Métrique | Type | Description |
-|----------|------|-------------|
-| `sfu_active_peers` | Gauge | Nombre de pairs connectés |
-| `sfu_active_channels` | Gauge | Nombre de salons actifs |
-| `sfu_bandwidth_egress_bps` | Gauge | Bande passante sortante (bits/s) |
-| `sfu_bandwidth_ingress_bps` | Gauge | Bande passante entrante (bits/s) |
-| `sfu_packets_per_second` | Histogram | Paquets RTP par seconde |
-
-**Vérifier les Métriques**
-```bash
-# Endpoint metrics
-curl http://localhost:3001/metrics
-
-# Endpoint health
-curl http://localhost:3001/health
-```
-**Prometheus Configuration**
-```yaml
-# docker/prometheus.yml
-global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
-
-scrape_configs:
-  - job_name: 'signaling-server'
-    static_configs:
-      - targets: ['89.168.59.45:3001']
-    metrics_path: /metrics
-    scrape_interval: 5s
-
-  - job_name: 'node-exporter'
-    static_configs:
-      - targets: ['89.168.59.45:9100']
-
-  - job_name: 'alertmanager'
-    static_configs:
-      - targets: ['localhost:9093']
-```
-**Dashboard Grafana**
-Importer le dashboard pour visualiser :
-
-* Pairs connectés en temps réel
-* Bande passante (ingress/egress)
-* Paquets RTP par seconde
-* Nombre de salons actifs
-
-# **🔌 API WebSocket**
-
-## **Connection**
-
-```typescript
-const ws = new WebSocket('wss://89.168.59.45:3001/ws');
-
-ws.onopen = () => {
-  console.log('Connected to signaling server');
-};
-```
-
-**## Messages Client → Serveur**
-
-**Join Salon**
-```json
-{
-"type": "join",
-"channelId": "room-123",
-"userId": "user-abc",
-"username": "Alice"
-}
-```
-**SDP**
-```json
-{
-  "type": "offer",
-  "sdp": {
-    "type": "offer",
-    "sdp": "v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\n..."
-  }
-}
-```
-
-
-**Candidat ICE**
-```json
-{
-  "type": "ice",
-  "candidate": {
-    "candidate": "candidate:...",
-    "sdpMid": "0",
-    "sdpMLineIndex": 0
-  }
-}
-```
-
-**Chat**
-```json
-{
-  "type": "chat",
-  "channelId": "room-123",
-  "from": "user-abc",
-  "username": "Alice",
-  "message": "Hello!",
-  "timestamp": 1700000000000
-}
-```
-
-## **Messages Serveur → Client**
-
-**Joined**
-```json
-{
-  "type": "joined",
-  "channelId": "room-123",
-  "peers": [
-    {
-      "userId": "user-xyz",
-      "username": "Bob",
-      "isMuted": false,
-      "isDeafened": false
-    }
-  ],
-  "startedAt": 1700000000000
-}
-```
-**Track Map**
-```json
-{
-  "type": "trackMap",
-  "userId": "user-xyz",
-  "trackId": "track-123",
-  "streamId": "stream-456",
-  "kind": "video"
-}
-```
-**Stats**
-```json
-{
-  "type": "stats",
-  "userId": "user-abc",
-  "bandwidthBps": 1250000
-}
-```
-
-# **🔒 Sécurité**
-
-## **TLS Natif**
-
-Le serveur utilise axum-server avec rustls pour le chiffrement TLS :
-```rust
-let config = RustlsConfig::from_pem_file(
-    PathBuf::from("cert.pem"),
-    PathBuf::from("key.pem")
-).await?;
-
-axum_server::bind_rustls(addr, config)
-    .serve(app.into_make_service())
-    .await?;
-```
-## **Certificate Pinning**
-Le client Tauri intègre l'empreinte SHA-256 du certificat :
-```rust
-// Dans le client Tauri
-let expected_hash = "expected_certificate_hash_here";
-let cert_hash = compute_cert_hash(&server_cert);
-
-if cert_hash != expected_hash {
-    return Err("Certificate mismatch - possible MITM attack");
-}
-```
-
-# **Modèle OSI**
+## Sécurité
 
 | Couche | Protection |
-|--------|------------|
-| **Transport** | Chiffrement TLS (AES-256) via axum-server |
-| **Réseau** | Isolation VCN Oracle + iptables |
-| **Application** | Memory Safety (Rust) - Pas de buffer overflow |
+|---|---|
+| **Transport** | TLS 1.3 (rustls, AES-256) |
+| **Média** | DTLS/SRTP pour tous les tracks WebRTC |
+| **Auth** | Hachage Argon2id, JWT Bearer |
+| **Mémoire** | Memory safety Rust — pas de buffer overflow |
 
-# **Sécurité WebRTC**
+## Licence
 
-| Flux | Chiffrement |
-|------|-------------|
-| Signaling (WSS) | TLS 1.3 |
-| Média (Audio/Video) | DTLS/SRTP |
-| Données (DataChannel) | DTLS/SRTP |
-
-# **⚡ Performance**
-## **Benchmarks (VM Oracle ARM Ampere plan Always Free)**
-
-| Métrique | Valeur |
-|----------|--------|
-| **Architecture** | ARM64 (4 cœurs) |
-| **RAM** | 24 GB |
-| **Bande Passante** | 1 Gbps |
-| **Latence Signalisation** | < 10ms |
-| **Pairs Maximaux** | 100+ par salon |
-| **Codec Audio** | Opus (48kHz) |
-| **Codec Vidéo** | VP8/VP9/H.264 |
-
-## **🧮 Calcule théorique**
-**Voici les facteurs déterminants pour estimer la capacité :**
-
-# **1. Bande Passante (Facteur Limitant Principal)**
-```plaintext
-Bande Passante Totale : 1 Gbps = 1,000,000,000 bps
-
-Par Pair (Estimation) :
-- Audio (Opus 48kHz) : ~64 kbps
-- Vidéo (VP8 720p) : ~500-1000 kbps
-
-Pour Audio uniquement :
-1,000,000,000 / 64,000 = ~15,625 pairs
-
-Pour Vidéo 720p :
-1,000,000,000 / 750,000 = ~1,333 pairs
-```
-
-# **2. CPU (ARM 4 Cœurs)**
-```plaintext
-WebRTC SFU : Le CPU gère le forwarding des paquets RTP (sans décoder)
-
-Estimation :
-- 1 pair audio : ~2-5% CPU
-- 1 pair vidéo : ~10-20% CPU
-
-Pour 4 cœurs ARM :
-- Audio uniquement : ~100-200 pairs
-- Vidéo 720p : ~20-50 pairs
-```
-3. Mémoire (24 GB)
-```plaintext
-Par Pair (Estimation) :
-- Connexion WebSocket : ~1-2 MB
-- Buffer RTP : ~5-10 MB
-- RTCPeerConnection : ~10-20 MB
-
-Total par pair : ~20-30 MB
-
-24 GB / 25 MB = ~960 pairs max (théorique)
-```
-
-| Configuration | Pairs Maximaux par Salon | Salons Simultanés |
-|---------------|--------------------------|-------------------|
-| **Audio uniquement** | 100-200 | 5-10 |
-| **Vidéo 720p** | 20-50 | 3-5 |
-| **Mixte (Audio + Vidéo)** | 50-100 | 3-5 |
-
-## **Optimisations**
-
-* **Jitter Buffer :** 30ms pour lisser les paquets RTP
-* **Forwarding Asynchrone :** Utilisation de tokio::spawn pour le forwarding
-* **Catch-up Optimisé :** Un seul offer SDP pour tous les tracks existants
-* **Memory Safety :** Rust élimine les erreurs de gestion mémoire
-
-# **🐛 Dépannage**
-
-## **Problème : Certificats non trouvés**
-
-```bash
-# Vérifier que les certificats sont à la racine
-ls -la cert.pem key.pem
-
-# Permissions correctes
-chmod 600 key.pem
-chmod 644 cert.pem
-```
-## **Problème : Ports bloqués**
-
-```bash
-# Trouver le processus
-sudo lsof -i :3001
-
-# Tuer le processus
-sudo kill -9 <PID>
-
-# Ou arrêter Docker
-docker compose down
-```
-## **Problème : Métriques non exposées**
-
-```bash
-# Vérifier que l'endpoint fonctionne
-curl http://localhost:3001/metrics
-
-# Vérifier les logs Prometheus
-docker logs prometheus | grep "signaling-server"
-```
-## **Problème : Connexion refusée**
-```bash
-# Vérifier les règles firewall
-sudo iptables -L -n -v
-
-# Vérifier les logs
-docker compose logs signaling-server
-```
-
-# _📚 Ressources_
-
-* [Documentation axum-server](https://docs.rs/axum-server/latest/axum_server/)
-* [Documentation rustls](https://docs.rs/rustls/latest/rustls/)
-* [WebRTC SFU Best Practices](https://webrtc.org/best-practices/sfu/)
-* [Prometheus Metrics](https://prometheus.io/docs/concepts/metric_types/)
-* [Grafana Dashboards](https://grafana.com/grafana/dashboards)
-* [Oracle Cloud VCN](https://docs.oracle.com/en-us/iaas/Content/Network/Concepts/overview.htm)
-
-# **📝 Licence**
-
-Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
-
+**BSL-1.1** — Voir [LICENSE](../../LICENSE).

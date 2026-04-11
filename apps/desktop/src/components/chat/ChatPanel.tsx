@@ -1,17 +1,27 @@
 import { useState, useEffect, useRef } from 'react';
 import { useChatStore } from '../../context/ChatContext';
 import { useVoiceStore } from '../../context/VoiceContext';
-import { Send } from 'lucide-react';
+import { Send, X } from 'lucide-react';
+import { useBentoLayout } from "../../hooks/useBentoLayout";
+import { useBentoDrag } from "../../hooks/useBentoDrag";
+import { useBentoResize } from "../../hooks/useBentoResize";
+import ResizeHandle from "../layout/ResizeHandle";
+import ChatPanelProps from "../../models/chat/chatPanelProps.model";
+import { ChatMessageList } from "./ChatMessageList";
 
 const MAX_CHARACTERS = 300;
 
-export const ChatPanel = () => {
+export const ChatPanel = ({ channelName, onClose }: ChatPanelProps) => {
     const { chatMessages, sendChatMessage } = useChatStore();
-    const { localUserId } = useVoiceStore();
+    const { localUserId, voiceAvatar } = useVoiceStore();
     const [input, setInput] = useState('');
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
-    // Scroll automatique
+    const { x, y, w, h, onMove, onResize } = useBentoLayout("chat-panel");
+    const handleDragStart = useBentoDrag(onMove);
+    const handleResizeStart = useBentoResize(onResize, "corner");
+
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [chatMessages]);
@@ -25,71 +35,76 @@ export const ChatPanel = () => {
         }
     };
 
-    const remainingChars = MAX_CHARACTERS - input.length;
-    const isNearLimit = input.length > MAX_CHARACTERS * 0.8;
-
     return (
-        <div className="absolute inset-0 flex flex-col bg-[#313338] text-[#dbdee1]">
-            <div className="flex-1 overflow-y-auto p-4 space-y-1 custom-scrollbar">
-                {chatMessages.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full opacity-50">
-                        <div className="text-4xl mb-4">💬</div>
-                        <h2 className="text-xl font-bold text-white mb-2">Bienvenue dans #chat-general !</h2>
-                        <p className="text-sm">C'est le début de l'histoire de ce salon.</p>
-                    </div>
-                ) : (
-                    chatMessages.map((msg, index) => {
-                        const prevMsg = chatMessages[index - 1];
-                        const isSameUser = prevMsg && prevMsg.from === msg.from && (msg.timestamp - prevMsg.timestamp < 300000);
+        <div
+            className="absolute z-30"
+            style={{ left: x, top: y, width: w, height: h, overflow: 'visible' }}
+        >
+            <div className="relative w-full h-full glass-heavy rounded-2xl border border-white/6 overflow-hidden shadow-[0_8px_32px_rgba(0,0,0,0.4)] flex flex-col">
+                {/* Drag handle */}
+                <div
+                    onMouseDown={handleDragStart}
+                    className="h-6 cursor-grab active:cursor-grabbing flex items-center justify-center hover:bg-white/4 transition-colors shrink-0"
+                >
+                    <div className="w-12 h-1.5 rounded-full bg-cyan-400/20" />
+                </div>
 
-                        return (
-                            <div key={`${msg.id}-${msg.timestamp}`} className={`flex flex-col group hover:bg-[#2e3035] -mx-4 px-4 ${isSameUser ? 'py-0.5' : 'mt-4 py-1'}`}>
-                                {!isSameUser && (
-                                    <div className="flex items-baseline gap-2 mb-0.5">
-                                        <span className={`font-bold ${msg.from === localUserId ? 'text-[#23a55a]' : 'text-white'} hover:underline cursor-pointer`}>
-                                            {msg.username}
-                                        </span>
-                                        <span className="text-[10px] text-gray-500 font-medium">
-                                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                    </div>
-                                )}
-                                <div className="text-[15px] break-words whitespace-pre-wrap leading-relaxed text-[#dbdee1]">
-                                    {msg.message}
-                                </div>
-                            </div>
-                        );
-                    })
-                )}
-                <div ref={messagesEndRef} />
-            </div>
+                {/* Header */}
+                <header className="h-12 flex items-center px-6 border-b border-white/6 shadow-[0_4px_24px_rgba(0,0,0,0.3)] glass shrink-0 relative z-20">
+                    <div className="absolute bottom-0 left-0 right-0 h-px bg-linear-to-r from-transparent via-cyan-500/10 to-transparent" />
+                    <span className="text-cyan-400/50 mr-3 font-mono font-bold text-lg">#</span>
+                    <h1 className="font-bold text-cyan-100/80 text-[13px] uppercase tracking-wider flex-1 truncate">
+                        {channelName}
+                    </h1>
+                    <button
+                        onClick={onClose}
+                        className="p-1.5 hover:bg-white/8 rounded-lg text-cyan-500/50 hover:text-cyan-300 transition-all cursor-pointer"
+                    >
+                        <X size={16} />
+                    </button>
+                </header>
 
-            <div className="px-4 pb-6 pt-2 bg-[#313338]">
-                <form onSubmit={handleSend} className="relative flex flex-col gap-1">
-                    <div className="relative flex items-center">
-                        <input
-                            type="text"
-                            value={input}
-                            onChange={(e) => setInput(e.target.value)}
-                            maxLength={MAX_CHARACTERS}
-                            placeholder={`Envoyer un message dans #chat-general`}
-                            className="w-full bg-[#383a40] text-[15px] text-[#dbdee1] rounded-[8px] px-4 py-2.5 focus:outline-none focus:ring-0 placeholder:text-[#949ba4]"
+                {/* Messages */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar min-h-0 flex flex-col">
+                    <div className="mt-auto">
+                        <ChatMessageList
+                            messages={chatMessages}
+                            localUserId={localUserId}
+                            voiceAvatar={voiceAvatar}
                         />
-                        <button 
-                            type="submit"
-                            className="absolute right-3 p-1 text-[#b5bac1] hover:text-[#dbdee1] disabled:opacity-30 transition-colors"
-                            disabled={!input.trim()}
-                        >
-                            <Send size={20} />
-                        </button>
+                        <div ref={messagesEndRef} className="h-4" />
                     </div>
-                    {isNearLimit && (
-                        <div className={`text-[10px] self-end font-medium ${remainingChars <= 0 ? 'text-red-400' : 'text-gray-500'}`}>
-                            {remainingChars} caractères restants
+                </div>
+
+                {/* Input */}
+                <div className="p-4 pt-0 shrink-0">
+                    <form onSubmit={handleSend} className="relative">
+                        <div className="absolute inset-0 bg-cyan-900/20 rounded-xl blur-xl" />
+                        <div className="relative flex items-center glass-heavy border border-cyan-500/20 rounded-xl overflow-hidden shadow-[0_0_20px_rgba(34,211,238,0.1)] focus-within:border-cyan-500 focus-within:shadow-[0_0_30px_rgba(34,211,238,0.2)] transition-all duration-300">
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={input}
+                                onChange={(e) => setInput(e.target.value)}
+                                placeholder={`Envoyer un message dans #${channelName}`}
+                                className="flex-1 bg-transparent border-none px-4 py-3.5 text-cyan-100 placeholder-cyan-500/50 text-[14px] focus:outline-none font-medium"
+                            />
+                            <button
+                                type="submit"
+                                disabled={!input.trim()}
+                                className="p-3 text-cyan-500/70 hover:text-cyan-400 disabled:opacity-50 disabled:hover:text-cyan-500/70 transition-colors mr-1"
+                            >
+                                <Send size={18} className={input.trim() ? "animate-pulse" : ""} />
+                            </button>
                         </div>
-                    )}
-                </form>
+                    </form>
+                </div>
+
+                {/* Ambient glow */}
+                <div className="absolute top-0 right-0 w-96 h-96 bg-cyan-500/5 rounded-full blur-[120px] pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-96 h-96 bg-blue-500/5 rounded-full blur-[120px] pointer-events-none" />
             </div>
+            <ResizeHandle onMouseDown={handleResizeStart} />
         </div>
     );
 };

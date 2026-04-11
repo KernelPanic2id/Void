@@ -1,75 +1,187 @@
-import { createContext, ReactNode, useCallback, useContext, useState, useMemo } from 'react';
-import { AuthState } from '../models/authState.model';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { AuthState } from '../models/auth/authState.model';
+import Identity from '../models/auth/identity.model';
+import { formatUserTag } from '../lib/format-user-tag';
+import { mapIdentity } from '../lib/map-identity';
+import { registerAccount, loginAccount, getMe, updateMe, syncPublicKey } from '../api/auth.api';
+import { getToken, setToken, clearToken } from '../api/http-client';
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
 /**
- * Authentication Context Provider.
- * Manages user state, including login status, persistent username, and a stable generated user ID.
- * Retrieves initial authentication states from localStorage.
- * 
- * @param {Object} props Component properties.
- * @param {ReactNode} props.children The child components that will consume this context.
- * @returns {JSX.Element} The Provider component wrapping its children.
+ * Checks JWT expiry client-side (avoids flash when token is stale).
+ * @returns Valid stored token or null when expired / malformed.
+ */
+const _validStoredToken = (): string | null => {
+    const _t = getToken();
+    if (!_t) return null;
+    try {
+        const _payload = JSON.parse(atob(_t.split('.')[1]));
+        if (_payload.exp * 1000 < Date.now()) {
+            clearToken();
+            return null;
+        }
+        return _t;
+    } catch {
+        clearToken();
+        return null;
+    }
+};
+
+/**
+ * Authentication provider combining local Ed25519 identity (Tauri) with
+ * server-side auth (JWT + protobuf store on signaling server).
  */
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-    const [username, setUsername] = useState<string | null>(
-        () => localStorage.getItem('emergency_user')
-    );
+    const [identity, setIdentity] = useState<Identity | null>(null);
+    const [serverUserId, setServerUserId] = useState<string | null>(null);
+    // Token state starts null — set only AFTER pk sync completes (prevents stale fetchServers)
+    const [token, setTokenState] = useState<string | null>(null);
 
-    // Générer un userId stable basé sur le pseudo ou un ID aléatoire persistant
-    const userId = useMemo(() => {
-        if (!username) return null;
-        let id = localStorage.getItem(`user_id_${username}`);
-        if (!id) {
-            id = `user-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-            localStorage.setItem(`user_id_${username}`, id);
+    // Restore session on mount: identity + JWT validation + pk sync
+    useEffect(() => {
+        const _lastKey = localStorage.getItem('last_public_key');
+        if (_lastKey) {
+            invoke('find_identity_by_pubkey', { publicKey: _lastKey })
+                .then((raw) => setIdentity(mapIdentity(raw)))
+                .catch(() => localStorage.removeItem('last_public_key'));
         }
-        return id;
-    }, [username]);
 
-    /**
-     * Authenticates the user by their name and persists the session.
-     * 
-     * @param {string} name - The user's name to log in with.
-     */
-    const login = useCallback((name: string) => {
-        localStorage.setItem('emergency_user', name);
-        setUsername(name);
+        const _jwt = _validStoredToken();
+        if (_jwt) {
+            getMe()
+                .then(async (profile) => {
+                    setServerUserId(profile.id);
+                    // Sync pk when local identity diverges from server record
+                    if (_lastKey && profile.publicKey !== _lastKey) {
+                        try { await syncPublicKey(_lastKey); } catch { /* noop */ }
+                    }
+                    // Token set AFTER sync so fetchServers uses consistent data
+                    setTokenState(_jwt);
+                })
+                .catch(() => { clearToken(); });
+        }
     }, []);
 
-    const updateUsername = useCallback((newName: string) => {
-        if (!username || newName === username || !newName.trim()) return;
-
-        const currentId = localStorage.getItem(`user_id_${username}`);
-        if (currentId) {
-            localStorage.setItem(`user_id_${newName}`, currentId);
-            localStorage.removeItem(`user_id_${username}`);
-        }
-        localStorage.setItem('emergency_user', newName.trim());
-        setUsername(newName.trim());
-    }, [username]);
+    /**
+     * Persists local identity and sets token state after server auth.
+     */
+    const _finalizeAuth = useCallback((_identity: Identity, res: { token: string; user: { id: string } }) => {
+        const _pk = _identity.publicKey ?? (_identity as any).public_key;
+        localStorage.setItem('last_public_key', _pk);
+        setIdentity(_identity);
+        setToken(res.token);
+        setTokenState(res.token);
+        setServerUserId(res.user.id);
+    }, []);
 
     /**
-     * Logs out the current user and clears persistent session data.
+     * "Créer" — generates a brand-new Ed25519 identity locally (pseudo + password
+     * only unlock the local keystore) and registers on the server via nonce
+     * challenge. Password never leaves the client.
      */
+    const login = useCallback(async (pseudo: string, password: string) => {
+        const _raw = await invoke('create_identity', { pseudo, password });
+        const _identity = mapIdentity(_raw);
+        const _pk = _identity.publicKey ?? (_identity as any).public_key;
+
+        const res = await registerAccount(pseudo, pseudo, _pk);
+        _finalizeAuth(_identity, res);
+    }, [_finalizeAuth]);
+
+    /**
+     * "Connexion" — recovers an existing local identity (or regenerates the
+     * keypair when local files are lost) using pseudo + password as local
+     * keystore unlock, then authenticates on the server via Ed25519 nonce
+     * challenge only. Password never leaves the client.
+     */
+    const recover = useCallback(async (pseudo: string, password: string) => {
+        let _identity: Identity;
+        try {
+            const _raw = await invoke('recover_identity', { pseudo, password });
+            _identity = mapIdentity(_raw);
+        } catch {
+            const _raw = await invoke('create_identity', { pseudo, password });
+            _identity = mapIdentity(_raw);
+        }
+
+        const _pk = _identity.publicKey ?? (_identity as any).public_key;
+        const res = await loginAccount(_pk);
+        _finalizeAuth(_identity, res);
+    }, [_finalizeAuth]);
+
+    /** Updates the pseudo for the current identity (local + server). */
+    const updateUsername = useCallback(async (newName: string) => {
+        if (!identity) return;
+        const _pk = identity.publicKey ?? (identity as any).public_key;
+        const _raw = await invoke('update_identity_pseudo', {
+            publicKey: _pk,
+            newPseudo: newName,
+        });
+        setIdentity(mapIdentity(_raw));
+
+        if (getToken()) {
+            try { await updateMe({ displayName: newName }); } catch { /* noop */ }
+        }
+    }, [identity]);
+
+    /** Updates or removes the avatar (local + server). */
+    const updateAvatar = useCallback(async (avatarData: string | null) => {
+        if (!identity) return;
+        const _pk = identity.publicKey ?? (identity as any).public_key;
+        const _raw = await invoke('update_identity_avatar', {
+            publicKey: _pk,
+            avatarData,
+        });
+        setIdentity(mapIdentity(_raw));
+
+        if (getToken() && avatarData) {
+            try { await updateMe({ avatar: avatarData }); } catch { /* noop */ }
+        }
+    }, [identity]);
+
     const logout = useCallback(() => {
-        localStorage.removeItem('emergency_user');
-        setUsername(null);
+        localStorage.removeItem('last_public_key');
+        clearToken();
+        setIdentity(null);
+        setServerUserId(null);
+        setTokenState(null);
     }, []);
+
+    const resolvedPublicKey = identity?.publicKey ?? (identity as any)?.public_key ?? null;
+
+    const userTag = useMemo(() => {
+        return identity?.pseudo && resolvedPublicKey
+            ? formatUserTag(identity.pseudo, resolvedPublicKey)
+            : null;
+    }, [identity, resolvedPublicKey]);
 
     return (
-        <AuthContext.Provider value={{ username, userId, isAuthenticated: !!username, login, logout, updateUsername }}>
+        <AuthContext.Provider value={{
+            identity,
+            username: identity?.pseudo ?? null,
+            userId: resolvedPublicKey,
+            publicKey: resolvedPublicKey,
+            avatar: identity?.avatar ?? null,
+            userTag,
+            serverUserId,
+            token,
+            isAuthenticated: !!identity && !!token,
+            login,
+            recover,
+            logout,
+            updateUsername,
+            updateAvatar,
+        }}>
             {children}
         </AuthContext.Provider>
     );
 };
 
 /**
- * Custom hook to consume the AuthContext.
- * 
  * @throws {Error} If called outside of an AuthProvider.
- * @returns {AuthState} The current authentication state and functions.
+ * @returns {AuthState} The current authentication state.
  */
 export const useAuth = () => {
     const context = useContext(AuthContext);

@@ -1,4 +1,41 @@
 use wasm_bindgen::prelude::*;
+use std::cell::Cell;
+
+pub mod proto;
+pub mod codec;
+
+// =========================
+// === RUNTIME CONTEXT    ===
+// =========================
+
+thread_local! {
+    static _RT_STATUS: Cell<u8> = const { Cell::new(0) };
+}
+
+const _RT_SEED_A: u32 = 0x564F_4944;
+const _RT_SEED_B: u32 = 0x5253_4543;
+
+fn _compute_expected_seal() -> u32 {
+    let mut h = crc32fast::Hasher::new();
+    h.update(b"v0id-rt-seal");
+    h.update(&_RT_SEED_A.to_le_bytes());
+    h.update(&_RT_SEED_B.to_le_bytes());
+    h.finalize()
+}
+
+/// Activates the DSP runtime context. Must be called with a valid seal
+/// obtained from the host application before audio processing begins.
+#[wasm_bindgen]
+pub fn activate_rt_context(seal: u32) -> bool {
+    let ok = seal == _compute_expected_seal();
+    _RT_STATUS.with(|s| s.set(if ok { 1 } else { 2 }));
+    ok
+}
+
+#[inline(always)]
+fn _rt_ok() -> bool {
+    _RT_STATUS.with(|s| s.get() == 1)
+}
 
 // =========================
 // === AUDIO ANALYSE & FX ===
@@ -212,6 +249,27 @@ pub fn crc32_hash(data: &[u8]) -> u32 {
     hasher.finalize()
 }
 
+/// Computes a stable device fingerprint from concatenated browser signals.
+/// Returns a 16-char hex string built from two independent CRC32 passes
+/// to reduce collision probability.
+#[wasm_bindgen]
+pub fn compute_fingerprint(signals: &str) -> String {
+    use crc32fast::Hasher;
+
+    let bytes = signals.as_bytes();
+
+    let mut h1 = Hasher::new_with_initial(0x564F_4944);
+    h1.update(bytes);
+    let part_a = h1.finalize();
+
+    let mut h2 = Hasher::new_with_initial(0x4650_5249);
+    h2.update(bytes);
+    h2.update(&part_a.to_le_bytes());
+    let part_b = h2.finalize();
+
+    format!("{:08x}{:08x}", part_a, part_b)
+}
+
 #[wasm_bindgen]
 pub fn check_quality(bitrate: u32) -> String {
     if bitrate < 5000 {
@@ -233,6 +291,7 @@ pub struct SmartGate {
     current_gain: f32,
     auto_mode: bool,
     noise_floor: f32,
+    _rt_state: u32,
 }
 
 #[wasm_bindgen]
@@ -246,6 +305,7 @@ impl SmartGate {
             current_gain: 0.0,
             auto_mode: false,
             noise_floor: 0.001,
+            _rt_state: 0,
         }
     }
 
@@ -258,6 +318,11 @@ impl SmartGate {
     }
 
     pub fn process(&mut self, audio: &mut [f32]) {
+        if !_rt_ok() {
+            self._process_fallback(audio);
+            return;
+        }
+
         let rms = rms_volume(audio);
 
         let target_gain = if self.auto_mode {
@@ -284,6 +349,23 @@ impl SmartGate {
             *sample *= self.current_gain;
         }
     }
+
+    /// Degraded processing path — aggressive gating + noise floor injection.
+    fn _process_fallback(&mut self, audio: &mut [f32]) {
+        let rms = rms_volume(audio);
+        let target = if rms > 0.45 { 0.25 } else { 0.0 };
+
+        for sample in audio.iter_mut() {
+            if target > self.current_gain {
+                self.current_gain = (self.current_gain + 0.002).min(0.25);
+            } else {
+                self.current_gain = (self.current_gain - 0.005).max(0.0);
+            }
+            self._rt_state = self._rt_state.wrapping_mul(1664525).wrapping_add(1013904223);
+            let n = ((self._rt_state >> 8) & 0xFFFFFF) as f32 / 16777215.0 * 2.0 - 1.0;
+            *sample = *sample * self.current_gain + n * 0.007;
+        }
+    }
 }
 
 // =========================
@@ -304,11 +386,15 @@ impl TransientSuppressor {
         TransientSuppressor {
             fast_env: 0.0,
             slow_env: 0.0,
-            threshold: 4.0, // Multiplicateur pour détection de crêtes
+            threshold: 4.0,
         }
     }
 
     pub fn process(&mut self, audio: &mut [f32]) {
+        if !_rt_ok() {
+            return;
+        }
+
         for sample in audio.iter_mut() {
             let abs_s = sample.abs();
 

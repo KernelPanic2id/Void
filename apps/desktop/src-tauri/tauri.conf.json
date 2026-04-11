@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "DiscordWASM",
-  "version": "0.2.1",
-  "identifier": "com.discord.app",
+  "productName": "Void",
+  "version": "0.1.0",
+  "identifier": "com.void.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -12,13 +12,15 @@
   "app": {
     "windows": [
       {
-        "title": "Vocal WASM",
+        "title": "Void",
         "width": 1280,
-        "height": 720
+        "height": 720,
+        "decorations": false,
+        "transparent": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; connect-src 'self' wss://89.168.59.45:3001 https://89.168.59.45:3001 ws://localhost:8080 http://localhost:8080 https://github.com; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:"
     }
   },
   "plugins": {
@@ -27,7 +29,7 @@
       "active": true,
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRCNzQ5MDk3QjkwRTg3REYKUldUZmh3NjVsNUIwUzRkSzRHYmNRWHhJakRuVm9JU2M4d29XVFkyYnlLUGtJMkord1MwV3RaUVIK",
       "endpoints": [
-        "https://github.com/RaphaelTaibi/discordWASM/releases/latest/download/latest.json"
+        "https://github.com/RaphaelTaibi/Void/releases/latest/download/latest.json"
       ],
       "dialog": true
     }
@@ -37,6 +39,9 @@
     "targets": "all",
     "createUpdaterArtifacts": true,
     "publisher": "Raphael Taibi",
+    "license": "BUSL-1.1",
+    "licenseFile": "../../../LICENSE",
+    "copyright": "© 2025 Raphael Taibi. All rights reserved.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

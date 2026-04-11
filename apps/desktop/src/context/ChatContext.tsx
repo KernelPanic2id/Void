@@ -1,95 +1,85 @@
-import { createContext, ReactNode, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useVoiceStore } from './VoiceContext';
-import ChatMessage from '../models/chatMessage.model';
-import ChatContextValue from '../models/chatContextValue.model';
+import { useServer } from './ServerContext';
+import ChatContextValue from '../models/chat/chatContextValue.model';
+import ChatMessage from '../models/chat/chatMessage.model';
+import { fetchChannelMessages } from '../api/server.api';
 
 const ChatContext = createContext<ChatContextValue | undefined>(undefined);
 
-const STORAGE_KEY = 'chat_history_main';
-const MAX_MESSAGES = 100; // Limite pour viter la saturation du localStorage
-
 /**
- * Chat component context provider.
- * Intercepts incoming messages from the VoiceStore (Socket layer) and manages the persistent local chat history.
- * Ensures the message count does not exceed internal limits while syncing with browser LocalStorage.
- * 
- * @param {Object} props Component properties.
- * @param {ReactNode} props.children Child elements inheriting the context.
- * @returns {JSX.Element} The Provider component wrapping its children.
+ * Channel-aware chat context. Loads history from the server when
+ * the active text channel changes and forwards WebSocket messages.
  */
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
-    const { chatMessages: socketMessages, sendChatMessage: sendViaSocket } = useVoiceStore();
-    const [persistedMessages, setPersistedMessages] = useState<ChatMessage[]>([]);
+    const { chatMessages: wsChatMessages, sendChatMessage: wsSend, clearChatMessages } = useVoiceStore();
+    const { activeServerId } = useServer();
+    const [activeChannelId, setActiveChannelId] = useState<string | null>(null);
+    const [historyMessages, setHistoryMessages] = useState<ChatMessage[]>([]);
+    const _prevChannelRef = useRef<string | null>(null);
 
-    // Charger l'historique au montage
-    useEffect(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-            try {
-                const parsed = JSON.parse(saved);
-                if (Array.isArray(parsed)) {
-                    // On garde seulement les derniers messages si l'historique est trop long
-                    const sliced = parsed.slice(-MAX_MESSAGES);
-                    setPersistedMessages(sliced);
-                }
-            } catch (e) {
-                console.error("Failed to parse chat history", e);
-            }
+    /** Fetches persisted chat history from the signaling server. */
+    const loadHistory = useCallback(async (serverId: string, channelId: string) => {
+        try {
+            const _messages = await fetchChannelMessages(serverId, channelId);
+            setHistoryMessages(_messages);
+        } catch {
+            setHistoryMessages([]);
         }
     }, []);
 
-    // Synchroniser avec les messages arrivant du VoiceStore (Socket)
+    // Reload history when active channel or server changes
     useEffect(() => {
-        if (socketMessages.length === 0) return;
+        if (activeChannelId && activeServerId && activeChannelId !== _prevChannelRef.current) {
+            clearChatMessages();
+            loadHistory(activeServerId, activeChannelId);
+        }
+        if (!activeChannelId) {
+            setHistoryMessages([]);
+        }
+        _prevChannelRef.current = activeChannelId;
+    }, [activeChannelId, activeServerId, loadHistory, clearChatMessages]);
 
-        setPersistedMessages(prev => {
-            // Fusionner sans doublons
-            const existingIds = new Set(prev.map(m => m.id));
-            const newOnes = socketMessages.filter(m => !existingIds.has(m.id));
-            
-            if (newOnes.length === 0) return prev;
+    // Reset on server switch
+    useEffect(() => {
+        setActiveChannelId(null);
+        setHistoryMessages([]);
+        clearChatMessages();
+    }, [activeServerId, clearChatMessages]);
 
-            // Garder seulement les X derniers messages
-            const combined = [...prev, ...newOnes].slice(-MAX_MESSAGES);
-            
-            // Sauvegarde asynchrone pour ne pas bloquer le thread principal
-            setTimeout(() => {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(combined));
-            }, 0);
+    // Merge history + live WS messages for the active channel, dedupe by id
+    const chatMessages = (() => {
+        const _map = new Map<string, ChatMessage>();
+        for (const m of historyMessages) _map.set(m.id, m);
+        for (const m of wsChatMessages) {
+            if (m.channelId === activeChannelId) _map.set(m.id, m);
+        }
+        return Array.from(_map.values()).sort((a, b) => a.timestamp - b.timestamp);
+    })();
 
-            return combined;
-        });
-    }, [socketMessages]);
-
-    /**
-     * Dispatch a chat message to the network through the underlying socket system.
-     * 
-     * @param {string} message The text content of the message to broadcast.
-     */
+    /** Sends a message to the currently active text channel. */
     const sendChatMessage = useCallback((message: string) => {
-        sendViaSocket(message);
-    }, [sendViaSocket]);
-
-    /**
-     * Clears all recorded message history both in current memory and localStorage.
-     */
-    const clearHistory = useCallback(() => {
-        localStorage.removeItem(STORAGE_KEY);
-        setPersistedMessages([]);
-    }, []);
+        if (!activeChannelId) return;
+        wsSend(message, activeChannelId);
+    }, [activeChannelId, wsSend]);
 
     return (
-        <ChatContext.Provider value={{ chatMessages: persistedMessages, sendChatMessage, clearHistory }}>
+        <ChatContext.Provider value={{
+            chatMessages,
+            sendChatMessage,
+            clearHistory: clearChatMessages,
+            loadHistory,
+            activeChannelId,
+            setActiveChannelId,
+        }}>
             {children}
         </ChatContext.Provider>
     );
 };
 
 /**
- * Custom hook to safely grab the current Chat context, including messages and dispatch functions.
- * 
- * @throws {Error} Throws an error if invoked outside of a valid ChatProvider subtree.
- * @returns {ChatContextValue} The fully initialized chat state context values.
+ * @throws {Error} Throws if invoked outside of a valid ChatProvider subtree.
+ * @returns {ChatContextValue} Chat state and dispatch functions.
  */
 export const useChatStore = () => {
     const context = useContext(ChatContext);

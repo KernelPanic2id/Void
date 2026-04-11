@@ -1,5 +1,5 @@
 export type ClientSignalMessage =
-    | { type: 'join'; channelId: string; userId: string; username: string }
+    | { type: 'join'; channelId: string; userId: string; username: string; fingerprint?: string }
     | { type: 'leave'; channelId: string; userId: string }
     | { type: 'offer'; sdp: RTCSessionDescriptionInit }
     | { type: 'answer'; sdp: RTCSessionDescriptionInit }
