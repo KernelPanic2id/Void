@@ -142,6 +142,7 @@ jobs:
             cat > .env << ENVEOF
             PRIMARY_PIN_HASH="${{ secrets.PRIMARY_PIN_HASH }}"
             BACKUP_PIN_HASH="${{ secrets.BACKUP_PIN_HASH }}"
+            JWT_SECRET="${{ secrets.JWT_SECRET }}"
             SMTP_AUTH_PASSWORD="${{ secrets.SMTP_AUTH_PASSWORD }}"
             SLACK_WEBHOOK_URL="${{ secrets.SLACK_WEBHOOK_URL }}"
             GF_ADMIN_PASSWORD="${{ secrets.GF_ADMIN_PASSWORD }}"
