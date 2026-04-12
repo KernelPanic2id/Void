@@ -60,9 +60,7 @@ async fn register(
         return Err(ApiError::Forbidden("Invalid identity signature".into()));
     }
 
-    if store.username_index.contains_key(&username) {
-        return Err(ApiError::Conflict("Username already taken".into()));
-    }
+    // Username is a display name — uniqueness is on the public key only
     if store.pubkey_index.contains_key(pk) {
         return Err(ApiError::Conflict("Public key already registered".into()));
     }

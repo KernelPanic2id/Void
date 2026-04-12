@@ -91,20 +91,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }, [_finalizeAuth]);
 
     /**
-     * "Connexion" — recovers an existing local identity (or regenerates the
-     * keypair when local files are lost) using pseudo + password as local
-     * keystore unlock, then authenticates on the server via Ed25519 nonce
-     * challenge only. Password never leaves the client.
+     * "Connexion" — recovers an existing local identity using pseudo + password
+     * as local keystore unlock, then authenticates on the server via Ed25519
+     * nonce challenge only. Password never leaves the client.
+     * Throws if the local identity is lost (keypair cannot be regenerated).
      */
     const recover = useCallback(async (pseudo: string, password: string) => {
-        let _identity: Identity;
-        try {
-            const _raw = await invoke('recover_identity', { pseudo, password });
-            _identity = mapIdentity(_raw);
-        } catch {
-            const _raw = await invoke('create_identity', { pseudo, password });
-            _identity = mapIdentity(_raw);
-        }
+        const _raw = await invoke('recover_identity', { pseudo, password });
+        const _identity = mapIdentity(_raw);
 
         const _pk = _identity.publicKey ?? (_identity as any).public_key;
         const res = await loginAccount(_pk);

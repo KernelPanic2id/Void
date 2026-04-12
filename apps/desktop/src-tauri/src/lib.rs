@@ -37,6 +37,11 @@ impl ServerCertVerifier for MyVerifier {
         _ocsp_response: &[u8],
         _now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
+        // No real pins compiled in → dev build, accept any cert
+        if PRIMARY_PIN == "DEV_PIN" && BACKUP_PIN == "DEV_PIN" {
+            return Ok(ServerCertVerified::assertion());
+        }
+
         let cert_der = end_entity.as_ref();
         let mut hasher = Sha256::new();
         hasher.update(cert_der);
@@ -273,11 +278,7 @@ fn get_dsp_token() -> u32 {
 
 #[tauri::command]
 async fn call_signaling(client: tauri::State<'_, reqwest::Client>, url: String) -> Result<String, String> {
-    let res = if url.starts_with("http://") {
-        reqwest::Client::new().get(&url).send().await
-    } else {
-        client.get(&url).send().await
-    };
+    let res = client.get(&url).send().await;
     res.map_err(|e| e.to_string())?.text().await.map_err(|e| e.to_string())
 }
 
@@ -308,11 +309,7 @@ async fn http_fetch(
     let method: reqwest::Method = request.method.parse()
         .map_err(|_| format!("Invalid HTTP method: {}", request.method))?;
 
-    let mut builder = if request.url.starts_with("http://") {
-        reqwest::Client::new().request(method, &request.url)
-    } else {
-        client.request(method, &request.url)
-    };
+    let mut builder = client.request(method, &request.url);
 
     for (k, v) in &request.headers {
         builder = builder.header(k.as_str(), v.as_str());
