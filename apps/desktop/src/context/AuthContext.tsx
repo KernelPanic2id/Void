@@ -39,28 +39,74 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Token state starts null — set only AFTER pk sync completes (prevents stale fetchServers)
     const [token, setTokenState] = useState<string | null>(null);
 
-    // Restore session on mount: identity + JWT validation + pk sync
+    /**
+     * Silently re-authenticates with the server using Ed25519 nonce challenge.
+     * Falls back to re-registering the existing identity if the server
+     * doesn't recognise the public key (e.g. after a server data wipe).
+     */
+    const _silentLogin = useCallback(async (publicKey: string, pseudo?: string) => {
+        try {
+            const res = await loginAccount(publicKey);
+            setToken(res.token);
+            setTokenState(res.token);
+            setServerUserId(res.user.id);
+        } catch {
+            // Server doesn't know this key — re-register with existing identity
+            if (pseudo) {
+                try {
+                    const res = await registerAccount(pseudo, pseudo, publicKey);
+                    setToken(res.token);
+                    setTokenState(res.token);
+                    setServerUserId(res.user.id);
+                } catch {
+                    clearToken();
+                }
+            } else {
+                clearToken();
+            }
+        }
+    }, []);
+
+    // Restore session on mount: identity + JWT validation + auto-reconnect
     useEffect(() => {
         const _lastKey = localStorage.getItem('last_public_key');
-        if (_lastKey) {
-            invoke('find_identity_by_pubkey', { publicKey: _lastKey })
-                .then((raw) => setIdentity(mapIdentity(raw)))
-                .catch(() => localStorage.removeItem('last_public_key'));
-        }
+        if (!_lastKey) return;
+
+        const _restoreIdentity = invoke('find_identity_by_pubkey', { publicKey: _lastKey })
+            .then((raw) => {
+                const _id = mapIdentity(raw);
+                setIdentity(_id);
+                return _id;
+            })
+            .catch(() => {
+                localStorage.removeItem('last_public_key');
+                return null;
+            });
 
         const _jwt = _validStoredToken();
+
         if (_jwt) {
+            // Valid JWT — validate with server
             getMe()
                 .then(async (profile) => {
                     setServerUserId(profile.id);
-                    // Sync pk when local identity diverges from server record
                     if (_lastKey && profile.publicKey !== _lastKey) {
                         try { await syncPublicKey(_lastKey); } catch { /* noop */ }
                     }
-                    // Token set AFTER sync so fetchServers uses consistent data
                     setTokenState(_jwt);
                 })
-                .catch(() => { clearToken(); });
+                .catch(() => {
+                    // JWT rejected by server — try silent re-login
+                    clearToken();
+                    _restoreIdentity.then((_id) => {
+                        if (_id) _silentLogin(_lastKey, _id.pseudo);
+                    });
+                });
+        } else {
+            // No valid JWT — auto-reconnect if local identity exists
+            _restoreIdentity.then((_id) => {
+                if (_id) _silentLogin(_lastKey, _id.pseudo);
+            });
         }
     }, []);
 
@@ -93,16 +139,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     /**
      * "Connexion" — recovers an existing local identity using pseudo + password
      * as local keystore unlock, then authenticates on the server via Ed25519
-     * nonce challenge only. Password never leaves the client.
-     * Throws if the local identity is lost (keypair cannot be regenerated).
+     * nonce challenge only. Falls back to re-register if server lost the key.
+     * Password never leaves the client.
      */
     const recover = useCallback(async (pseudo: string, password: string) => {
         const _raw = await invoke('recover_identity', { pseudo, password });
         const _identity = mapIdentity(_raw);
-
         const _pk = _identity.publicKey ?? (_identity as any).public_key;
-        const res = await loginAccount(_pk);
-        _finalizeAuth(_identity, res);
+
+        try {
+            const res = await loginAccount(_pk);
+            _finalizeAuth(_identity, res);
+        } catch {
+            // Server doesn't know this key — re-register with existing identity
+            const res = await registerAccount(pseudo, pseudo, _pk);
+            _finalizeAuth(_identity, res);
+        }
     }, [_finalizeAuth]);
 
     /** Updates the pseudo for the current identity (local + server). */

@@ -1,16 +1,24 @@
 import { invoke } from '@tauri-apps/api/core';
 import { config } from '../lib/config';
 
-let _token: string | null = null;
+const TOKEN_KEY = 'void_jwt';
+
+let _token: string | null = localStorage.getItem(TOKEN_KEY);
 
 /** @returns The current JWT or null. */
 export const getToken = (): string | null => _token;
 
-/** Stores a JWT in memory (never persisted to Web Storage). */
-export const setToken = (token: string): void => { _token = token; };
+/** Stores a JWT in memory and localStorage. */
+export const setToken = (token: string): void => {
+    _token = token;
+    localStorage.setItem(TOKEN_KEY, token);
+};
 
-/** Clears the in-memory JWT. */
-export const clearToken = (): void => { _token = null; };
+/** Clears the JWT from memory and localStorage. */
+export const clearToken = (): void => {
+    _token = null;
+    localStorage.removeItem(TOKEN_KEY);
+};
 
 /**
  * Routes an HTTP request through Tauri's cert-pinned reqwest client.
