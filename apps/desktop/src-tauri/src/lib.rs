@@ -318,7 +318,7 @@ async fn http_fetch(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let _ = rustls::crypto::ring::default_provider().install_default();
+    let _ = rustls::crypto::ring::default_provider().try_install_default();
     let crypto = Arc::new(rustls::ClientConfig::builder()
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(MyVerifier))
