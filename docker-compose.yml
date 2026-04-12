@@ -16,6 +16,7 @@ services:
       - signaling_data:/app
     environment:
       - RUST_LOG=info
+      - JWT_SECRET=${JWT_SECRET}
     healthcheck:
       test: ["CMD", "curl", "-fk", "https://localhost:3001/health"]
       interval: 30s
