@@ -15,9 +15,15 @@ use rustls_pki_types::{CertificateDer, UnixTime, ServerName};
 
 use tauri::{Manager, Emitter, Listener};
 
-// --- CONFIGURATION PINNING ---
-const PRIMARY_PIN: &str = "JZnp4wOHrwvdpPtDzwptWkD//NH4oiGY2rP/3GmAZWI=";
-const BACKUP_PIN: &str = "DEV_PIN";
+// --- CONFIGURATION PINNING (injected at compile-time via env vars) ---
+const PRIMARY_PIN: &str = match option_env!("PRIMARY_PIN_HASH") {
+    Some(v) => v,
+    None => "DEV_PIN",
+};
+const BACKUP_PIN: &str = match option_env!("BACKUP_PIN_HASH") {
+    Some(v) => v,
+    None => "DEV_PIN",
+};
 
 #[derive(Debug)]
 struct MyVerifier;
@@ -318,19 +324,24 @@ async fn http_fetch(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let _ = rustls::crypto::ring::default_provider().try_install_default();
-    let crypto = Arc::new(rustls::ClientConfig::builder()
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
+    // TLS config with custom certificate pinning verifier
+    let crypto = rustls::ClientConfig::builder()
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(MyVerifier))
-        .with_no_client_auth());
+        .with_no_client_auth();
 
+    let arc_crypto = Arc::new(crypto);
+
+    // reqwest expects a bare ClientConfig, not Arc — deref and clone
     let client = reqwest::Client::builder()
-        .use_preconfigured_tls(crypto.clone())
+        .use_preconfigured_tls((*arc_crypto).clone())
         .connect_timeout(std::time::Duration::from_secs(10))
         .build()
         .expect("Failed to build reqwest client");
 
-    let ws_connector = tokio_tungstenite::Connector::Rustls(crypto.clone());
+    let ws_connector = tokio_tungstenite::Connector::Rustls(arc_crypto.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
