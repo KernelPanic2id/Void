@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::errors::ApiError;
 use crate::fraud::FraudState;
 use crate::models::*;
-use crate::negotiate::{accepts_proto, decode_body, negotiate, negotiate_list, Negotiated};
+use crate::negotiate::{Negotiated, accepts_proto, decode_body, negotiate, negotiate_list};
 use crate::nonce::NonceStore;
 use crate::sfu::crypto;
 use crate::sfu::registry::ServerRegistry;
@@ -43,7 +43,9 @@ async fn register(
 
     let username = body.username.trim().to_lowercase();
     if username.len() < 2 {
-        return Err(ApiError::BadRequest("Username must be at least 2 characters".into()));
+        return Err(ApiError::BadRequest(
+            "Username must be at least 2 characters".into(),
+        ));
     }
 
     let pk = &body.public_key;
@@ -85,7 +87,13 @@ async fn register(
     store.mark_dirty();
 
     let token = jwt::create_token(&id).map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(negotiate(AuthResponse { token, user: Some(profile) }, proto))
+    Ok(negotiate(
+        AuthResponse {
+            token,
+            user: Some(profile),
+        },
+        proto,
+    ))
 }
 
 /// POST /api/auth/login
@@ -130,21 +138,23 @@ async fn login(
             ApiError::Unauthorized("Unknown public key — register first".into())
         })?;
 
-
     let profile = store
         .users
         .get(&user_id)
         .map(|r| UserProfile::from(r.value()))
         .ok_or_else(|| ApiError::Internal("User disappeared".into()))?;
     let token = jwt::create_token(&user_id).map_err(|e| ApiError::Internal(e.to_string()))?;
-    Ok(negotiate(AuthResponse { token, user: Some(profile) }, proto))
+    Ok(negotiate(
+        AuthResponse {
+            token,
+            user: Some(profile),
+        },
+        proto,
+    ))
 }
 
 /// GET /api/auth/me
-async fn me(
-    State(store): State<Store>,
-    headers: HeaderMap,
-) -> Result<Negotiated, ApiError> {
+async fn me(State(store): State<Store>, headers: HeaderMap) -> Result<Negotiated, ApiError> {
     let proto = accepts_proto(&headers);
     let auth = AuthUser::from_headers(&headers)?;
     let record = store
@@ -193,7 +203,9 @@ async fn update_profile(
             if let Some(ref opk) = old_pk {
                 store.pubkey_index.remove(opk);
             }
-            store.pubkey_index.insert(new_pk_owned.clone(), auth.user_id.clone());
+            store
+                .pubkey_index
+                .insert(new_pk_owned.clone(), auth.user_id.clone());
             record.public_key = Some(new_pk_owned.clone());
             let profile = UserProfile::from(&*record);
             drop(record);
@@ -224,7 +236,11 @@ async fn search_users(
     let q = params.q.trim().to_lowercase();
     tracing::debug!("search_users: raw_q={:?} parsed_q={:?}", params.q, q);
     if q.is_empty() {
-        return Ok(negotiate_list(vec![], |items| UserSummaryList { items }, proto));
+        return Ok(negotiate_list(
+            vec![],
+            |items| UserSummaryList { items },
+            proto,
+        ));
     }
 
     // Parse tag format: "pseudo#XXXX"
@@ -249,22 +265,28 @@ async fn search_users(
                 return false;
             }
 
-            // Match by tag (pseudo#XXXX) — checks both display_name and username
+            // Tag mode (`pseudo#XXXX`): STRICT match — both the name part
+            // and the public-key suffix must match. No name-only fallback,
+            // otherwise unrelated homonyms leak into the results.
             if let (Some(name), Some(suffix)) = (&tag_name, &tag_suffix) {
-                let name_matches = u.display_name.to_lowercase().contains(name)
-                    || u.username.contains(name);
-                if name_matches {
-                    if let Some(ref pk) = u.public_key {
-                        let pk_suffix: String = pk.chars().rev().take(4).collect::<String>()
-                            .chars().rev().collect::<String>().to_uppercase();
-                        if pk_suffix.starts_with(suffix.as_str()) {
-                            return true;
-                        }
-                    }
+                let name_matches =
+                    u.display_name.to_lowercase().contains(name) || u.username.contains(name);
+                if !name_matches {
+                    return false;
                 }
-                // Tag format supplied but no pk match — still try name-only
-                // so the user at least finds candidates.
-                if name_matches { return true; }
+                if let Some(ref pk) = u.public_key {
+                    let pk_suffix: String = pk
+                        .chars()
+                        .rev()
+                        .take(4)
+                        .collect::<String>()
+                        .chars()
+                        .rev()
+                        .collect::<String>()
+                        .to_uppercase();
+                    return pk_suffix.starts_with(suffix.as_str());
+                }
+                return false;
             }
 
             // Match by public_key substring
@@ -275,16 +297,18 @@ async fn search_users(
             }
 
             // Match by display_name or username (plain text)
-            let plain = tag_name.as_deref().unwrap_or(&q);
-            u.display_name.to_lowercase().contains(plain)
-                || u.username.contains(plain)
+            u.display_name.to_lowercase().contains(&q) || u.username.contains(&q)
         })
         .take(20)
         .map(|r| UserSummary::from(r.value()))
         .collect();
 
     tracing::debug!("search_users: {} result(s) for q={:?}", results.len(), q);
-    Ok(negotiate_list(results, |items| UserSummaryList { items }, proto))
+    Ok(negotiate_list(
+        results,
+        |items| UserSummaryList { items },
+        proto,
+    ))
 }
 
 /// Replaces `old_pk` with `new_pk` in every server's member list and in
@@ -305,9 +329,7 @@ fn migrate_server_memberships(registry: &ServerRegistry, old_pk: &str, new_pk: &
 
     // Fallback: full scan when index is empty (self-healing for stale indexes)
     if server_ids.is_empty() {
-        tracing::warn!(
-            "member_index empty for old_pk during migration — running full scan"
-        );
+        tracing::warn!("member_index empty for old_pk during migration — running full scan");
         server_ids = registry
             .servers
             .iter()
@@ -317,9 +339,7 @@ fn migrate_server_memberships(registry: &ServerRegistry, old_pk: &str, new_pk: &
     }
 
     if server_ids.is_empty() {
-        tracing::info!(
-            "No server memberships found for old_pk — nothing to migrate"
-        );
+        tracing::info!("No server memberships found for old_pk — nothing to migrate");
         return;
     }
 
@@ -339,7 +359,10 @@ fn migrate_server_memberships(registry: &ServerRegistry, old_pk: &str, new_pk: &
 
     // Synchronous flush: critical migration data must survive a restart
     registry.flush_sync();
-    tracing::info!("Migrated {} server memberships from old pk to new pk", server_ids.len());
+    tracing::info!(
+        "Migrated {} server memberships from old pk to new pk",
+        server_ids.len()
+    );
 }
 
 fn epoch_ms() -> i64 {

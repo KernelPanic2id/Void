@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react';
 import { ServerSignal } from '../types/serverSignal.type';
 import UseSfuConnectionProps from '../models/voice/useSfuConnectionProps.model';
+import { emitSignalingEvent } from '../lib/signalingBus';
 
 const ICE_SERVERS: RTCIceServer[] = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -20,6 +21,21 @@ export function useSfuConnection({
     const sfuConnectionRef = useRef<RTCPeerConnection | null>(null);
     const screenStreamRef = useRef<MediaStream | null>(null);
     const trackToUserMapRef = useRef<Map<string, string>>(new Map());
+    /** Streams that arrived via `ontrack` before their `track-map` mapping. */
+    const orphanStreamsRef = useRef<Map<string, { stream: MediaStream; kind: string }>>(new Map());
+    /** Track-maps received before their corresponding `ontrack` event. */
+    const pendingTrackMapsRef = useRef<Map<string, { userId: string; kind: string }>>(new Map());
+
+    // ---- Perfect-negotiation state ----
+    // The SFU is the "impolite" peer; this client is "polite". On glare
+    // (offer received while a local offer is in-flight or signalingState
+    // !== 'stable') the polite peer rolls back and accepts the remote offer.
+    // This unblocks the audio-isolation bug observed when two users join the
+    // same voice channel: the server's catch-up renegotiation offer would
+    // otherwise collide with the client's initial offer and silently fail.
+    const makingOfferRef = useRef<boolean>(false);
+    const ignoreOfferRef = useRef<boolean>(false);
+    const isSettingRemoteAnswerPendingRef = useRef<boolean>(false);
 
     const removeScreenTrack = useCallback(() => {
         if (screenStreamRef.current) {
@@ -45,6 +61,11 @@ export function useSfuConnection({
         const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
         sfuConnectionRef.current = pc;
 
+        // Reset perfect-negotiation flags for the new PC instance.
+        makingOfferRef.current = false;
+        ignoreOfferRef.current = false;
+        isSettingRemoteAnswerPendingRef.current = false;
+
         const local = localStreamRef.current;
         if (local) local.getAudioTracks().forEach(t => pc.addTrack(t, local));
 
@@ -59,23 +80,51 @@ export function useSfuConnection({
             if (!e.streams?.[0]) return;
             const stream = e.streams[0];
             const track = e.track;
-            const uid = trackToUserMapRef.current.get(track.id);
+            // Lookup by track id first (most reliable), fall back to stream id
+            // because the SFU's track-map references the source track id.
+            const uid = trackToUserMapRef.current.get(track.id)
+                || trackToUserMapRef.current.get(stream.id);
 
             if (uid) {
                 if (track.kind === 'audio') setRemoteStreams(r => new Map(r).set(uid, stream));
                 else if (track.kind === 'video') setRemoteVideoStreams(r => new Map(r).set(uid, stream));
-            } else {
-                if (track.kind === 'audio') setRemoteStreams(r => new Map(r).set(stream.id, stream));
-                else if (track.kind === 'video') setRemoteVideoStreams(r => new Map(r).set(stream.id, stream));
+                return;
             }
+
+            // No mapping yet — buffer the stream and check pending track-maps
+            const _pendingByTrack = pendingTrackMapsRef.current.get(track.id);
+            const _pendingByStream = pendingTrackMapsRef.current.get(stream.id);
+            const _pending = _pendingByTrack ?? _pendingByStream;
+            if (_pending) {
+                trackToUserMapRef.current.set(track.id, _pending.userId);
+                trackToUserMapRef.current.set(stream.id, _pending.userId);
+                if (track.kind === 'audio') setRemoteStreams(r => new Map(r).set(_pending.userId, stream));
+                else if (track.kind === 'video') setRemoteVideoStreams(r => new Map(r).set(_pending.userId, stream));
+                pendingTrackMapsRef.current.delete(track.id);
+                pendingTrackMapsRef.current.delete(stream.id);
+                return;
+            }
+
+            // Buffer as orphan — the track-map will resolve it shortly
+            orphanStreamsRef.current.set(track.id, { stream, kind: track.kind });
+            orphanStreamsRef.current.set(stream.id, { stream, kind: track.kind });
         };
 
+        // Perfect-negotiation: drive (re)negotiation through a single guarded path.
         pc.onnegotiationneeded = async () => {
             try {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                sendSignal({ type: 'offer', sdp: offer } as any);
-            } catch (err) { console.error("RTC negotiation error:", err); }
+                makingOfferRef.current = true;
+                // setLocalDescription() with no args lets the browser pick the
+                // right SDP (offer/answer/rollback) given the current state.
+                await pc.setLocalDescription();
+                if (pc.localDescription) {
+                    sendSignal({ type: 'offer', sdp: pc.localDescription } as any);
+                }
+            } catch (err) {
+                console.error('RTC negotiation error:', err);
+            } finally {
+                makingOfferRef.current = false;
+            }
         };
     }, [sendSignal, localStreamRef, setRemoteStreams, setRemoteVideoStreams]);
 
@@ -98,6 +147,9 @@ export function useSfuConnection({
                     }
                     break;
                 case 'peer-joined': {
+                    // Suppress global presence toasts — they leak presence of any
+                    // user (incl. non-friends) and create noise outside vocal rooms.
+                    if (msg.channelId === 'global') break;
                     const peer = { ...msg.peer, isMuted: !!msg.peer.isMuted, isDeafened: !!msg.peer.isDeafened };
                     setParticipants(p => p.some(part => part.userId === peer.userId) ? p : [...p, peer]);
                     addToast(`${msg.peer.username} a rejoint le salon`, 'join');
@@ -106,7 +158,9 @@ export function useSfuConnection({
                 case 'peer-left':
                     setParticipants(p => {
                         const _leaving = p.find(part => part.userId === msg.userId);
-                        if (_leaving) addToast(`${_leaving.username} a quitté le salon`, 'leave');
+                        if (_leaving && msg.channelId !== 'global') {
+                            addToast(`${_leaving.username} a quitté le salon`, 'leave');
+                        }
                         return p.filter(part => part.userId !== msg.userId);
                     });
                     break;
@@ -114,33 +168,103 @@ export function useSfuConnection({
                     setParticipants(p => p.map(part =>
                         part.userId === msg.userId ? { ...part, isMuted: msg.isMuted, isDeafened: msg.isDeafened } : part));
                     break;
-                case 'track-map':
+                case 'track-map': {
                     trackToUserMapRef.current.set(msg.trackId, msg.userId);
+                    trackToUserMapRef.current.set(msg.streamId, msg.userId);
+
+                    // Resolve any orphan stream that arrived before this mapping
+                    const _orphan = orphanStreamsRef.current.get(msg.trackId)
+                        ?? orphanStreamsRef.current.get(msg.streamId);
+                    if (_orphan) {
+                        if (_orphan.kind === 'audio') {
+                            setRemoteStreams(r => new Map(r).set(msg.userId, _orphan.stream));
+                        } else if (_orphan.kind === 'video') {
+                            setRemoteVideoStreams(r => new Map(r).set(msg.userId, _orphan.stream));
+                        }
+                        orphanStreamsRef.current.delete(msg.trackId);
+                        orphanStreamsRef.current.delete(msg.streamId);
+                    } else {
+                        // Buffer the mapping for an `ontrack` that hasn't fired yet
+                        pendingTrackMapsRef.current.set(msg.trackId, { userId: msg.userId, kind: msg.kind });
+                        pendingTrackMapsRef.current.set(msg.streamId, { userId: msg.userId, kind: msg.kind });
+                    }
+
+                    // Migrate any state entry keyed by streamId / trackId to userId
                     setRemoteStreams(prev => {
-                        if (!prev.has(msg.streamId)) return prev;
+                        const _src = prev.get(msg.streamId) ?? prev.get(msg.trackId);
+                        if (!_src) return prev;
                         const _next = new Map(prev);
-                        _next.set(msg.userId, prev.get(msg.streamId)!);
+                        _next.set(msg.userId, _src);
+                        _next.delete(msg.streamId);
+                        _next.delete(msg.trackId);
                         return _next;
                     });
                     setRemoteVideoStreams(prev => {
-                        if (!prev.has(msg.streamId)) return prev;
+                        const _src = prev.get(msg.streamId) ?? prev.get(msg.trackId);
+                        if (!_src) return prev;
                         const _next = new Map(prev);
-                        _next.set(msg.userId, prev.get(msg.streamId)!);
+                        _next.set(msg.userId, _src);
+                        _next.delete(msg.streamId);
+                        _next.delete(msg.trackId);
                         return _next;
                     });
                     break;
-                case 'offer':
-                    if (!sfuConnectionRef.current) connectSFU();
-                    await sfuConnectionRef.current!.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-                    const _answer = await sfuConnectionRef.current!.createAnswer();
-                    await sfuConnectionRef.current!.setLocalDescription(_answer);
-                    sendSignal({ type: 'answer', sdp: _answer } as any);
+                }
+                case 'offer': {
+                    if (!sfuConnectionRef.current) await connectSFU();
+                    const _pc = sfuConnectionRef.current!;
+                    // Polite-peer collision detection: a glare happens when a
+                    // remote offer arrives while a local offer is in-flight or
+                    // the PC is not in a clean `stable` state. We accept the
+                    // server's offer in any case (the SFU is impolite) by
+                    // letting setLocalDescription() perform an implicit rollback
+                    // if needed (browsers ≥ M80 / Firefox ≥ 75 support this).
+                    const _readyForOffer = !makingOfferRef.current
+                        && (_pc.signalingState === 'stable' || isSettingRemoteAnswerPendingRef.current);
+                    const _offerCollision = !_readyForOffer;
+                    ignoreOfferRef.current = false; // polite — never ignore
+                    if (_offerCollision) {
+                        // Implicit rollback via parallel set: setRemoteDescription
+                        // with an offer in have-local-offer state triggers rollback.
+                        await Promise.all([
+                            _pc.setLocalDescription({ type: 'rollback' }).catch(() => {}),
+                            _pc.setRemoteDescription(new RTCSessionDescription(msg.sdp)),
+                        ]);
+                    } else {
+                        await _pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                    }
+                    await _pc.setLocalDescription();
+                    if (_pc.localDescription) {
+                        sendSignal({ type: 'answer', sdp: _pc.localDescription } as any);
+                    }
                     break;
-                case 'answer':
-                    if (sfuConnectionRef.current) await sfuConnectionRef.current.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                }
+                case 'answer': {
+                    if (!sfuConnectionRef.current) break;
+                    const _pc = sfuConnectionRef.current;
+                    if (_pc.signalingState !== 'have-local-offer') {
+                        // Stale answer (already rolled-back or superseded). Drop it
+                        // rather than crash setRemoteDescription.
+                        break;
+                    }
+                    isSettingRemoteAnswerPendingRef.current = true;
+                    try {
+                        await _pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+                    } finally {
+                        isSettingRemoteAnswerPendingRef.current = false;
+                    }
                     break;
+                }
                 case 'ice':
-                    if (sfuConnectionRef.current && msg.candidate) await sfuConnectionRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                    if (sfuConnectionRef.current && msg.candidate) {
+                        try {
+                            await sfuConnectionRef.current.addIceCandidate(new RTCIceCandidate(msg.candidate));
+                        } catch (err) {
+                            // Tolerate ICE errors during rollback — they are expected
+                            // and would otherwise spam the console.
+                            if (!ignoreOfferRef.current) console.warn('ICE add failed:', err);
+                        }
+                    }
                     break;
                 case 'chat':
                     setChatMessages(prev => {
@@ -148,12 +272,36 @@ export function useSfuConnection({
                         if (prev.some(m => m.id === id)) return prev;
                         return [...prev, { id, from: msg.from, username: msg.username, message: msg.message, timestamp: Number(msg.timestamp), channelId: msg.channelId }];
                     });
+                    // Fan out to bus subscribers (ChatContext + future consumers).
+                    emitSignalingEvent('chat', {
+                        id: `${msg.from}-${msg.timestamp}`,
+                        from: msg.from,
+                        username: msg.username,
+                        message: msg.message,
+                        timestamp: Number(msg.timestamp),
+                        channelId: msg.channelId,
+                    });
                     break;
                 case 'stats':
                     setBandwidthStats(prev => new Map(prev).set(msg.userId, msg.bandwidthBps));
                     break;
                 case 'error':
                     setError(msg.message);
+                    break;
+                case 'friend-request-received':
+                case 'friend-request-accepted':
+                case 'friend-request-declined':
+                case 'friend-request-cancelled':
+                case 'friend-removed':
+                    emitSignalingEvent(msg.type, msg as never);
+                    break;
+                case 'authenticated':
+                case 'server-member-presence':
+                case 'server-member-added':
+                case 'server-member-removed':
+                case 'rpc-result':
+                    // Phase 3 push events — forwarded verbatim to the bus.
+                    emitSignalingEvent(msg.type, msg as never);
                     break;
             }
         } catch (e) { console.error("Signal parsing error:", e); }
@@ -165,4 +313,3 @@ export function useSfuConnection({
         addScreenTrack, removeScreenTrack,
     };
 }
-

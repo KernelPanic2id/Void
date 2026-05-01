@@ -2,14 +2,15 @@
 members = [
   "apps/desktop/src-tauri",
   "packages/core-wasm",
-  "packages/signaling-server"
+  "packages/signaling-server",
+  "packages/void-sfu"
 ]
 resolver = "2"
 
 [workspace.package]
 license = "BUSL-1.1"
 authors = ["Raphael Taibi"]
-repository = "https://github.com/RaphaelTaibi/Void"
+repository = "https://github.com/KernelPanic2id/Void"
 
 [profile.release]
 lto = true

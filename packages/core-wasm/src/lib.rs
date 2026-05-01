@@ -1,12 +1,19 @@
-use wasm_bindgen::prelude::*;
 use std::cell::Cell;
+use wasm_bindgen::prelude::*;
 
-pub mod proto;
 pub mod codec;
+pub mod proto;
 
 // =========================
 // === RUNTIME CONTEXT    ===
 // =========================
+
+// ======== Comments Block ========
+// This section contains runtime context management functions and constants.
+// It includes thread-local storage for runtime status and functions to compute
+// and validate runtime seals. These are critical for ensuring the DSP runtime
+// operates securely and as expected.
+// =================================
 
 thread_local! {
     static _RT_STATUS: Cell<u8> = const { Cell::new(0) };
@@ -25,6 +32,13 @@ fn _compute_expected_seal() -> u32 {
 
 /// Activates the DSP runtime context. Must be called with a valid seal
 /// obtained from the host application before audio processing begins.
+///
+/// # Example
+/// ```ignore
+/// let seal = compute_seal();
+/// let activated = activate_rt_context(seal);
+/// assert!(activated);
+/// ```
 #[wasm_bindgen]
 pub fn activate_rt_context(seal: u32) -> bool {
     let ok = seal == _compute_expected_seal();
@@ -37,15 +51,47 @@ fn _rt_ok() -> bool {
     _RT_STATUS.with(|s| s.get() == 1)
 }
 
+/// Bench-only helper: returns the expected runtime seal so criterion
+/// benchmarks can activate the DSP runtime without going through the
+/// host handshake. NEVER expose this in production builds.
+#[cfg(feature = "bench")]
+pub fn __bench_compute_seal() -> u32 {
+    _compute_expected_seal()
+}
+
 // =========================
 // === AUDIO ANALYSE & FX ===
 // =========================
 
+// ======== Comments Block ========
+// This section contains functions for audio analysis and effects.
+// It includes utilities for detecting peaks, computing RMS volume,
+// and applying audio compression. These functions are optimized
+// for real-time audio processing in DSP contexts.
+// =================================
+
+/// Detects if the audio signal exceeds a given threshold.
+/// Useful for peak detection in audio processing.
+///
+/// # Example
+/// ```ignore
+/// let audio = vec![0.1, 0.5, 0.9];
+/// let is_peak = detect_peak(&audio, 0.8);
+/// assert!(is_peak);
+/// ```
 #[wasm_bindgen]
 pub fn detect_peak(audio: &[f32], threshold: f32) -> bool {
     audio.iter().any(|&sample| sample.abs() > threshold)
 }
 
+/// Computes the RMS (Root Mean Square) volume of the audio signal.
+///
+/// # Example
+/// ```ignore
+/// let audio = vec![0.1, 0.2, 0.3];
+/// let rms = rms_volume(&audio);
+/// assert!(rms > 0.0);
+/// ```
 #[wasm_bindgen]
 pub fn rms_volume(audio: &[f32]) -> f32 {
     if audio.is_empty() {
@@ -67,8 +113,14 @@ pub fn dominant_freq(audio: &[f32], sample_rate: f32) -> f32 {
     }
     let mut max_corr = 0.0;
     let mut best_lag = 0;
-    let max_lag = (sample_rate / 50.0) as usize;
-    let min_lag = (sample_rate / 1000.0) as usize;
+    // Clamp lag bounds to the actual buffer length so short frames
+    // (e.g. 10 ms WebRTC packets at 48 kHz) cannot trigger out-of-bounds.
+    let raw_max = (sample_rate / 50.0) as usize;
+    let max_lag = raw_max.min(audio.len().saturating_sub(1));
+    let min_lag = ((sample_rate / 1000.0) as usize).max(1);
+    if min_lag >= max_lag {
+        return 0.0;
+    }
     for lag in min_lag..max_lag {
         let mut sum = 0.0;
         for i in 0..(audio.len() - lag) {
@@ -117,7 +169,9 @@ pub fn crest_factor(audio: &[f32]) -> f32 {
 #[wasm_bindgen]
 pub fn normalize_audio(audio: &[f32]) -> Vec<f32> {
     let max_val = audio.iter().map(|x| x.abs()).fold(0.0, f32::max);
-    if max_val == 0.0 { return audio.to_vec(); }
+    if max_val == 0.0 {
+        return audio.to_vec();
+    }
     audio.iter().map(|&x| x / max_val).collect()
 }
 
@@ -137,6 +191,13 @@ pub fn white_noise(len: usize, amplitude: f32, seed: u32) -> Vec<f32> {
 // === VIDEO ANALYSE & FX ===
 // =========================
 
+// ======== Comments Block ========
+// This section provides functions for video analysis and effects.
+// It includes utilities for analyzing frames, detecting black/white
+// frames, and computing color histograms. These functions are designed
+// for efficient processing of video data.
+// =================================
+
 #[wasm_bindgen]
 pub fn analyze_frame(data: &[u8], width: u32, height: u32) -> String {
     let mut total: u64 = 0;
@@ -144,17 +205,22 @@ pub fn analyze_frame(data: &[u8], width: u32, height: u32) -> String {
         total += data[i] as u64;
     }
     let avg = total / (width * height) as u64;
-    format!("Frame {}x{} - Luminosité moyenne (R): {}", width, height, avg)
+    format!(
+        "Frame {}x{} - LuminositÃ© moyenne (R): {}",
+        width, height, avg
+    )
 }
 
 #[wasm_bindgen]
 pub fn is_black_frame(data: &[u8], threshold: u8) -> bool {
-    data.chunks(4).all(|px| px[0] < threshold && px[1] < threshold && px[2] < threshold)
+    data.chunks(4)
+        .all(|px| px[0] < threshold && px[1] < threshold && px[2] < threshold)
 }
 
 #[wasm_bindgen]
 pub fn is_white_frame(data: &[u8], threshold: u8) -> bool {
-    data.chunks(4).all(|px| px[0] > threshold && px[1] > threshold && px[2] > threshold)
+    data.chunks(4)
+        .all(|px| px[0] > threshold && px[1] > threshold && px[2] > threshold)
 }
 
 #[wasm_bindgen]
@@ -172,15 +238,27 @@ pub fn color_histogram(data: &[u8]) -> Vec<u32> {
 
 #[wasm_bindgen]
 pub fn is_frozen_frame(data1: &[u8], data2: &[u8], tolerance: u8) -> bool {
-    if data1.len() != data2.len() { return false; }
-    data1.iter().zip(data2.iter()).all(|(&a, &b)| (a as i16 - b as i16).abs() <= tolerance as i16)
+    if data1.len() != data2.len() {
+        return false;
+    }
+    data1
+        .iter()
+        .zip(data2.iter())
+        .all(|(&a, &b)| (a as i16 - b as i16).abs() <= tolerance as i16)
 }
 
 // =========================
-// === RÉSEAU & SÉCURITÉ ===
+// === RÃ‰SEAU & SÃ‰CURITÃ‰ ===
 // =========================
 
-// Calcule un score de qualité réseau (0-3) bas sur WebRTC stats
+// ======== Comments Block ========
+// This section focuses on network and security-related utilities.
+// It includes functions for calculating network quality, processing
+// network statistics, and generating device fingerprints. These
+// utilities ensure robust and secure communication.
+// =================================
+
+// Calcule un score de qualitÃ© rÃ©seau (0-3) bas sur WebRTC stats
 #[wasm_bindgen]
 pub fn calculate_network_quality(latency_ms: f32, packet_loss: f32, jitter_ms: f32) -> u8 {
     // 3: Excellent, 2: Moyen, 1: Mauvais, 0: Critique/Dconnect
@@ -212,11 +290,7 @@ pub fn process_network_stats(
         final_rtt = fallback_rtt;
     }
 
-    let final_loss = if count > 0.0 {
-        total_loss / count
-    } else {
-        0.0
-    };
+    let final_loss = if count > 0.0 { total_loss / count } else { 0.0 };
 
     let final_jitter = if count > 0.0 {
         total_jitter / count
@@ -228,7 +302,13 @@ pub fn process_network_stats(
     let packet_loss_pct = final_loss * 100.0;
     let quality = calculate_network_quality(final_rtt, final_loss, final_jitter) as f32;
 
-    vec![final_ping, packet_loss_pct, final_jitter, quality, final_rtt]
+    vec![
+        final_ping,
+        packet_loss_pct,
+        final_jitter,
+        quality,
+        final_rtt,
+    ]
 }
 
 #[wasm_bindgen]
@@ -273,7 +353,7 @@ pub fn compute_fingerprint(signals: &str) -> String {
 #[wasm_bindgen]
 pub fn check_quality(bitrate: u32) -> String {
     if bitrate < 5000 {
-        format!("Bitrate faible: {} kbps - Qualité SD", bitrate)
+        format!("Bitrate faible: {} kbps - QualitÃ© SD", bitrate)
     } else {
         format!("Bitrate actuel: {} kbps - Analysé par Rust", bitrate)
     }
@@ -282,6 +362,13 @@ pub fn check_quality(bitrate: u32) -> String {
 // =========================
 // === SMART GATE AUDIO  ===
 // =========================
+
+// ======== Comments Block ========
+// This section implements the SmartGate audio processor.
+// It dynamically adjusts noise gating thresholds using Voice
+// Activity Detection (VAD) and adaptive noise floor estimation.
+// The SmartGate is optimized for challenging audio environments.
+// =================================
 
 #[wasm_bindgen]
 pub struct SmartGate {
@@ -334,7 +421,11 @@ impl SmartGate {
                 self.noise_floor += (rms - self.noise_floor) * 0.0001;
             }
             // Trigger threshold is dynamic: 4x the noise floor, with a minimum bottom
-            if rms > (self.noise_floor * 4.0).max(0.005) { 1.0 } else { 0.0 }
+            if rms > (self.noise_floor * 4.0).max(0.005) {
+                1.0
+            } else {
+                0.0
+            }
         } else {
             // Manual fixed threshold
             if rms > self.threshold { 1.0 } else { 0.0 }
@@ -350,7 +441,7 @@ impl SmartGate {
         }
     }
 
-    /// Degraded processing path — aggressive gating + noise floor injection.
+    /// Degraded processing path â€” aggressive gating + noise floor injection.
     fn _process_fallback(&mut self, audio: &mut [f32]) {
         let rms = rms_volume(audio);
         let target = if rms > 0.45 { 0.25 } else { 0.0 };
@@ -361,7 +452,10 @@ impl SmartGate {
             } else {
                 self.current_gain = (self.current_gain - 0.005).max(0.0);
             }
-            self._rt_state = self._rt_state.wrapping_mul(1664525).wrapping_add(1013904223);
+            self._rt_state = self
+                ._rt_state
+                .wrapping_mul(1664525)
+                .wrapping_add(1013904223);
             let n = ((self._rt_state >> 8) & 0xFFFFFF) as f32 / 16777215.0 * 2.0 - 1.0;
             *sample = *sample * self.current_gain + n * 0.007;
         }
@@ -372,11 +466,24 @@ impl SmartGate {
 // === TRANSIENT SUPPRESSOR ===
 // =========================
 
+// ======== Comments Block ========
+// This section implements the Transient Suppressor.
+// It reduces sudden and intense audio peaks, such as keyboard
+// clicks, while preserving the overall audio quality. The
+// suppressor uses fast and slow envelopes for precise control.
+// =================================
+
 #[wasm_bindgen]
 pub struct TransientSuppressor {
     fast_env: f32,
     slow_env: f32,
     threshold: f32,
+}
+
+impl Default for TransientSuppressor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[wasm_bindgen]
@@ -398,16 +505,16 @@ impl TransientSuppressor {
         for sample in audio.iter_mut() {
             let abs_s = sample.abs();
 
-            // Enveloppe rapide pour capter le clic immédiatement (~1ms @48kHz)
+            // Enveloppe rapide pour capter le clic immÃ©diatement (~1ms @48kHz)
             self.fast_env = self.fast_env * 0.9 + abs_s * 0.1;
 
-            // Enveloppe lente représentant l'énergie globale continue de la voix (~20ms @48kHz)
+            // Enveloppe lente reprÃ©sentant l'Ã©nergie globale continue de la voix (~20ms @48kHz)
             self.slow_env = self.slow_env * 0.999 + abs_s * 0.001;
 
-            // Si on détecte un pic très intense et soudain (typiquement clavier mécanique)
+            // Si on dÃ©tecte un pic trÃ¨s intense et soudain (typiquement clavier mÃ©canique)
             if self.fast_env > self.slow_env * self.threshold {
                 let target_gain = (self.slow_env * self.threshold) / self.fast_env.max(0.0001);
-                // On lisse légèrement la réduction
+                // On lisse lÃ©gÃ¨rement la rÃ©duction
                 *sample *= target_gain.powf(1.5);
             }
         }

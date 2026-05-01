@@ -2,8 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
 import React from 'react';
 
+
 /* ── Mock dependencies ── */
-vi.mock('../../api/friends.api', () => ({
+// FriendsContext now talks to the WS RPC client (`api/friends.ws`),
+// so the test must mock that module — not the legacy REST one.
+vi.mock('../../api/friends.ws', () => ({
     listFriends: vi.fn(async () => [
         { id: 'u1', username: 'alice', displayName: 'Alice', avatar: null, publicKey: 'pk1' },
     ]),
@@ -19,8 +22,22 @@ vi.mock('../../context/AuthContext', () => ({
     useAuth: () => ({ token: 'jwt-test' }),
 }));
 
+vi.mock('../../context/ToastContext', () => ({
+    useToast: () => ({ addToast: vi.fn() }),
+}));
+
+// The realtime hook subscribes to the signaling bus; in unit tests we
+// neutralize it so the provider stays deterministic.
+vi.mock('../../hooks/useFriendsRealtime', () => ({
+    useFriendsRealtime: vi.fn(),
+}));
+
+vi.mock('../../lib/signalingBus', () => ({
+    subscribeSignalingEvent: vi.fn(() => () => {}),
+}));
+
 import { FriendsProvider, useFriends } from '../../context/FriendsContext';
-import * as friendsApi from '../../api/friends.api';
+import * as friendsApi from '../../api/friends.ws';
 
 function wrapper({ children }: { children: React.ReactNode }) {
     return React.createElement(FriendsProvider, null, children);
@@ -48,8 +65,9 @@ describe('FriendsContext', () => {
 
         await act(async () => { await result.current.sendRequest('u42'); });
         expect(friendsApi.sendFriendRequest).toHaveBeenCalledWith('u42');
-        // refresh was called again (listFriends called twice: mount + after sendRequest)
-        expect(friendsApi.listFriends).toHaveBeenCalledTimes(2);
+        // No more polling/auto-refresh on actions — recipients are notified
+        // through the WS bus, the sender just fires-and-forgets.
+        expect(friendsApi.listFriends).toHaveBeenCalledTimes(1);
     });
 
     it('acceptRequest calls API and refreshes', async () => {
