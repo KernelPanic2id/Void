@@ -1,6 +1,7 @@
 import VoicePeer from '../models/voice/voicePeer.model';
 import { UserSummary } from '../models/auth/serverAuth.model';
 import { FriendEventPayload } from '../models/social/friendEventPayload.model';
+import { DmMessage } from '../models/social/dmMessage.model';
 
 export type ServerSignal =
     | { type: 'joined'; channelId: string; peers: VoicePeer[]; startedAt: number }
@@ -20,4 +21,7 @@ export type ServerSignal =
     | { type: 'server-member-added'; serverId: string; member: UserSummary }
     | { type: 'server-member-removed'; serverId: string; userId: string }
     | { type: 'rpc-result'; requestId: string; result?: unknown; error?: { code: string; message: string } }
+    // ---- Direct messages (1-to-1) ----
+    | (DmMessage & { type: 'dm-message' })
+    | { type: 'dm-ack'; id: string; clientMsgId?: string; timestamp: number }
     | FriendEventPayload;

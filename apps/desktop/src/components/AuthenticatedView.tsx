@@ -15,6 +15,7 @@ import { displayNameWithTag } from "../lib/identity-tag";
 import FriendsBar from "./friends/FriendsBar";
 import { useFriendsBar } from "../hooks/useFriendsBar";
 import { useChatStore } from "../context/ChatContext";
+import DmPanel from "./dm/DmPanel";
 
 /**
  * Main authenticated view. Composes MainLayout with all panels.
@@ -203,6 +204,9 @@ const AuthenticatedView: FC = () => {
                     onClose={() => setActiveTextChannelId(null)}
                 />
             )}
+
+            {/* Floating direct-message panel — renders only when a DM is open. */}
+            <DmPanel />
 
             <SettingsModal
                 isOpen={isSettingsOpen}

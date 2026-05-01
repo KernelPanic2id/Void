@@ -81,6 +81,7 @@ const FriendsBar = ({
                         friends.map(f => (
                             <FriendAvatar
                                 key={f.id}
+                                id={f.id}
                                 avatar={f.avatar}
                                 displayName={f.displayName}
                                 username={f.username}

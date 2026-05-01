@@ -300,6 +300,8 @@ export function useSfuConnection({
                 case 'server-member-added':
                 case 'server-member-removed':
                 case 'rpc-result':
+                case 'dm-message':
+                case 'dm-ack':
                     // Phase 3 push events — forwarded verbatim to the bus.
                     emitSignalingEvent(msg.type, msg as never);
                     break;

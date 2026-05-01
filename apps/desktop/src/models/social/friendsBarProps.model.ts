@@ -11,11 +11,12 @@ export interface FriendsBarProps {
 }
 
 export interface FriendAvatarProps {
+    /** Backend user id; used to open a DM and remove the friendship. */
+    id: string;
     avatar: string | null;
     displayName: string;
     username: string;
     publicKey: string | null;
-    onRemove?: () => void;
 }
 
 export interface AddFriendPopoverProps {

@@ -97,6 +97,19 @@ pub enum ClientMessage {
         #[serde(default)]
         params: serde_json::Value,
     },
+
+    /// Sends a 1-to-1 direct message to a peer the sender is friends with.
+    /// Fan-out is performed server-side via `notify_user`; both the sender
+    /// (echo) and the recipient receive a [`ServerMessage::DmMessage`].
+    /// `clientMsgId` is echoed back in [`ServerMessage::DmAck`] so the UI
+    /// can resolve its optimistic placeholder.
+    #[serde(rename_all = "camelCase")]
+    DmSend {
+        to_user_id: String,
+        message: String,
+        #[serde(default)]
+        client_msg_id: Option<String>,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -231,6 +244,27 @@ pub enum ServerMessage {
         result: Option<serde_json::Value>,
         #[serde(skip_serializing_if = "Option::is_none")]
         error: Option<RpcError>,
+    },
+
+    /// Direct message delivery — pushed to both the recipient and the
+    /// sender (echo). Persisted in `state.dm_history` until process exit.
+    #[serde(rename_all = "camelCase")]
+    DmMessage {
+        id: String,
+        from_user_id: String,
+        to_user_id: String,
+        message: String,
+        timestamp: u64,
+    },
+
+    /// Acknowledges a [`ClientMessage::DmSend`] so the sender's UI can
+    /// resolve its optimistic placeholder. Sent only to the original sender.
+    #[serde(rename_all = "camelCase")]
+    DmAck {
+        id: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        client_msg_id: Option<String>,
+        timestamp: u64,
     },
 }
 

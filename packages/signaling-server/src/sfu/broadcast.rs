@@ -12,18 +12,17 @@ pub fn serialize_message(message: &ServerMessage) -> Option<String> {
 }
 
 /// Pushes a server message to a single user (by id) if currently connected.
-/// No-op when the user is offline; drops are accounted for in `WS_QUEUE_DROPPED`.
+///
+/// Targets the auth-keyed `subscriptions.connections` registry — populated
+/// at WS authentication and persistent for the lifetime of the socket,
+/// regardless of voice-room membership. Drops are accounted for in
+/// `WS_QUEUE_DROPPED`. No-op when the user is offline.
 pub async fn notify_user(state: &Arc<AppState>, user_id: &str, message: &ServerMessage) {
     let payload = match serialize_message(message) {
         Some(p) => p,
         None => return,
     };
-    let peers = state.peers.read().await;
-    if let Some(peer) = peers.get(user_id) {
-        if peer.tx.try_send(payload).is_err() {
-            WS_QUEUE_DROPPED.inc();
-        }
-    }
+    state.subscriptions.send_to_user(user_id, &payload);
 }
 
 /// Broadcasts a JSON payload to every member of a (voice) channel.

@@ -12,11 +12,11 @@ use void_sfu::{PeerId, RoomId, SignalSink};
 
 use super::adapter::WsPeerSink;
 use super::broadcast::{broadcast_to_channel, remove_peer, serialize_message};
+use super::handler_helpers::{handle_authenticate, handle_dm_send};
 use super::models::{ClientMessage, PeerInfo, ServerMessage};
 use super::rpc as ws_rpc;
 use super::state::{AppState, CHAT_HISTORY_CAP, ChatEntry, PeerSession, WS_CHANNEL_CAPACITY};
 use super::subscriptions::{push_to_channel_subscribers, push_to_server_subscribers};
-use crate::auth::jwt;
 use crate::fraud::FraudState;
 use crate::metrics::WS_QUEUE_DROPPED;
 
@@ -251,6 +251,22 @@ async fn handle_socket(
                 )
                 .await;
             }
+
+            ClientMessage::DmSend {
+                to_user_id,
+                message,
+                client_msg_id,
+            } => {
+                handle_dm_send(
+                    &state,
+                    &tx,
+                    auth_user_id.as_deref(),
+                    to_user_id,
+                    message,
+                    client_msg_id,
+                )
+                .await;
+            }
         }
     }
 
@@ -258,7 +274,9 @@ async fn handle_socket(
         remove_peer(&state, &user_id).await;
     }
     if let Some(uid) = auth_user_id.take() {
-        // Drop all subscriptions and broadcast offline presence.
+        // Drop the auth-keyed binding first so no late push can race with
+        // shutdown (notify_user becomes a no-op for `uid`).
+        state.subscriptions.unbind_user(&uid);
         let servers = state.subscriptions.drop_user(&uid);
         for server_id in servers {
             let sid_clone = server_id.clone();
@@ -276,41 +294,6 @@ async fn handle_socket(
         }
     }
     send_task.abort();
-}
-
-/// Validates the JWT and binds the authenticated user_id to the WS.
-async fn handle_authenticate(
-    state: &Arc<AppState>,
-    tx: &mpsc::Sender<String>,
-    auth_user_id: &mut Option<String>,
-    token: String,
-) {
-    let outcome = match jwt::decode_token(&token) {
-        Ok(claims) => {
-            *auth_user_id = Some(claims.sub.clone());
-            ServerMessage::Authenticated {
-                user_id: claims.sub,
-                ok: true,
-            }
-        }
-        Err(e) => {
-            debug!("WS auth failed: {:?}", e);
-            *auth_user_id = None;
-            ServerMessage::Authenticated {
-                user_id: String::new(),
-                ok: false,
-            }
-        }
-    };
-
-    if let Some(payload) = serialize_message(&outcome) {
-        if tx.try_send(payload).is_err() {
-            WS_QUEUE_DROPPED.inc();
-        }
-    }
-
-    // Skip presence broadcast — clients explicitly subscribe to servers.
-    let _ = state; // keep the binding referenced when no subscriptions are needed.
 }
 
 /// Processes a Join message: registers the peer in the SFU, persists host-side

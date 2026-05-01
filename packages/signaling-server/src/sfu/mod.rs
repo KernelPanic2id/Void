@@ -1,7 +1,9 @@
 pub mod adapter;
 pub mod broadcast;
 pub mod crypto;
+pub mod dm;
 pub mod handler;
+pub mod handler_helpers;
 pub mod models;
 pub mod registry;
 pub mod routes;

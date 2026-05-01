@@ -1,6 +1,7 @@
 import { UserSummary } from '../models/auth/serverAuth.model';
 import ChatMessage from '../models/chat/chatMessage.model';
 import { FriendEventPayload } from '../models/social/friendEventPayload.model';
+import { DmMessage } from '../models/social/dmMessage.model';
 
 /**
  * Strongly-typed map of every event the signaling-bus can carry.
@@ -23,6 +24,10 @@ export type SignalingEventMap = {
     'server-member-added': { serverId: string; member: UserSummary };
     'server-member-removed': { serverId: string; userId: string };
     'rpc-result': { requestId: string; result?: unknown; error?: { code: string; message: string } };
+
+    // ---- Direct messages (1-to-1) ----
+    'dm-message': DmMessage;
+    'dm-ack': { id: string; clientMsgId?: string; timestamp: number };
 };
 
 type Handler<K extends keyof SignalingEventMap> = (payload: SignalingEventMap[K]) => void;

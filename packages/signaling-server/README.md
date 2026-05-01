@@ -178,8 +178,48 @@ Friends are **not** consumed via REST anymore. The desktop client opens a single
 | `friends.reject` | `{ id }` | `{ status: "rejected" }` | Reject a pending request. |
 | `friends.remove` | `{ id }` | `{ removed }` | Remove a friendship by id. |
 | `friends.removeByUser` | `{ userId }` | `{ removed }` | Remove a friendship by counterpart user id. |
+| `dm.history` | `{ userId }` | `DmEntry[]` | Full message history with one peer (oldest-first). Forbidden if not friends. |
+| `dm.partners` | — | `UserSummary[]` | Friends the user has exchanged a DM with, recent-first. |
 
-Every call goes through `src/sfu/rpc.rs` and reuses the `friends/core.rs` business logic verbatim — no duplication between transports.
+Every call goes through `src/sfu/rpc.rs` and reuses the `friends/core.rs` and `sfu/dm.rs` business logic verbatim — no duplication between transports.
+
+### Direct Messages (1-to-1) — push-only, no REST
+
+Direct messages travel on the same authenticated WebSocket as the rest of the control plane. **Voice/video media is unaffected**: it flows over WebRTC peer-connections through `void-sfu`, never through this socket.
+
+```mermaid
+sequenceDiagram
+    participant A as Alice (WS)
+    participant S as signaling-server
+    participant B as Bob (WS)
+
+    A->>S: { type: "authenticate", token }
+    S-->>A: { type: "authenticated", ok: true }
+    Note over S: subscriptions.bind_user("alice", tx)
+
+    B->>S: { type: "authenticate", token }
+    S-->>B: { type: "authenticated", ok: true }
+
+    A->>S: { type: "dm-send", toUserId: "bob", message: "hi", clientMsgId }
+    S->>S: dm::send_dm — checks accepted friendship<br/>persists in ring buffer (cap 200/pair)
+    S-->>B: { type: "dm-message", id, from, to, message, ts }
+    S-->>A: { type: "dm-message", id, from, to, message, ts } (echo)
+    S-->>A: { type: "dm-ack", id, clientMsgId, ts }
+```
+
+Wire types:
+
+| Frame | Direction | Shape |
+|---|---|---|
+| `dm-send` | client → server | `{ type, toUserId, message, clientMsgId? }` |
+| `dm-message` | server → client | `{ type, id, fromUserId, toUserId, message, timestamp }` |
+| `dm-ack` | server → sender only | `{ type, id, clientMsgId?, timestamp }` |
+
+Server-side rules (enforced in [`sfu/dm.rs`](src/sfu/dm.rs)):
+
+- **Friendship gate**: both `dm-send` and `dm.history` require an `accepted` friendship in `auth_store.friends`. Violations return `ApiError::Forbidden`.
+- **Persistence**: in-RAM ring buffer keyed by the ordered pair `(min_uid, max_uid)`, capped at `DM_HISTORY_CAP = 200` messages per pair. Survives only the lifetime of the process (no disk persistence in this iteration — see `sfu/state.rs`).
+- **No saturation of the voice socket**: this WS is the auth/control channel; WebRTC RTP packets travel over a different ICE-negotiated UDP transport managed by `void-sfu`.
 
 ### Server-pushed friend events
 
@@ -192,6 +232,8 @@ The server **proactively notifies** the impacted user(s) over the same WS so the
 | `FriendRemoved { friendship_id, by_user_id }` | The other party | A friendship was deleted. |
 
 The frontend bus (`subscribeSignalingEvent`, see `src/lib/signalingBus.ts`) hands these events to `useFriendsRealtime` which mutates the `FriendsContext` state without any HTTP round-trip.
+
+> **Architecture note — auth-keyed connection registry.** Every push from the server (`FriendRequestReceived`, `FriendRemoved`, `DmMessage`, `ServerMemberPresence`, …) is routed through `subscriptions.connections: DashMap<user_id, mpsc::Sender>`, populated when the client sends `Authenticate` and torn down when the WS closes. This registry is **independent from voice-room membership** — a user receives social/DM notifications even when they have never joined a voice channel. (Earlier versions read `state.peers`, which is voice-only, and silently dropped pushes outside of voice rooms.)
 
 ### REST `/api/friends/` (legacy)
 

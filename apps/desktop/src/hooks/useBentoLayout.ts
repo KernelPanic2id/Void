@@ -9,6 +9,7 @@ const DEFAULTS: Record<string, { x: number; y: number; w: number; h: number }> =
   "chat-panel":    { x: 0.7967, y: 0.117,  w: 0.2033, h: 0.883  },
   "friends-bar":   { x: 0.4138, y: 0.005,  w: 0.2188, h: 0.048  },
   "server-bar":    { x: 0.0005, y: 0.0,    w: 0.1133, h: 0.0698 },
+  "dm-panel":      { x: 0.55,   y: 0.15,   w: 0.32,   h: 0.55   },
 };
 
 /** Returns current bento container dimensions from the DOM. */

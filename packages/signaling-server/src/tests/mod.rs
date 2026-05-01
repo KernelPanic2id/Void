@@ -1,6 +1,7 @@
 mod broadcast_tests;
 mod crypto_tests;
 mod detector_tests;
+mod dm_tests;
 mod error_tests;
 mod fraud_store_tests;
 mod jwt_tests;

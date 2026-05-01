@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use tracing::debug;
 
 use super::broadcast::serialize_message;
+use super::dm as ws_dm;
 use super::models::{RpcError, ServerMessage};
 use super::state::AppState;
 use crate::errors::ApiError;
@@ -139,6 +140,19 @@ async fn run(
                 .unwrap_or_default();
             drop(history);
             Ok(json!(entries))
+        }
+
+        // ---- Direct messages ----
+        "dm.history" => {
+            let p: ByUserId = decode(params)?;
+            let entries = ws_dm::dm_history(state, user_id, &p.user_id)
+                .await
+                .map_err(api_to_rpc)?;
+            Ok(json!(entries))
+        }
+        "dm.partners" => {
+            let partners = ws_dm::list_recent_dm_partners(state, user_id).await;
+            Ok(json!(partners))
         }
 
         _ => Err(("unknown-method", format!("Unknown method: {}", method))),

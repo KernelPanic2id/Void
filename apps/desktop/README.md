@@ -11,6 +11,7 @@ graph TB
         VOICE["VoiceContext<br/>WebRTC SFU · WebSocket signaling<br/>AudioWorklet DSP pipeline"]
         STREAM["StreamContext<br/>Screen capture · WASM analyzer worker"]
         CHAT["ChatContext<br/>Messages · localStorage persistence"]
+        DM["DmContext<br/>1-to-1 direct messages over the auth WS"]
         SERVER["ServerContext<br/>Servers & channels management"]
         TOAST["ToastContext<br/>Ephemeral notifications"]
         BENTO["BentoLayoutContext<br/>Tauri-driven panel layout system"]
@@ -116,6 +117,37 @@ flowchart LR
 - **Max 350 lines** per file — extract logic if exceeded
 - **TailwindCSS v4** for styling, **lucide-react** for icons
 - **Comments** in English, JSDoc format
+
+## Direct Messages (1-to-1)
+
+DMs travel on the **same authenticated WebSocket** as friends/server presence — they do **not** open a second socket and do **not** share the WebRTC media transport. The voice/video path stays untouched: media flows over WebRTC peer-connections through the SFU, while DMs ride the JSON control channel.
+
+```mermaid
+sequenceDiagram
+    participant UI as FriendAvatar
+    participant CTX as DmContext
+    participant WS as Signaling WS
+    participant SRV as signaling-server
+
+    UI->>CTX: openDm(friend) (left-click)
+    CTX->>SRV: rpc("dm.history", { userId })
+    SRV-->>CTX: DmEntry[]
+    UI->>CTX: sendDm("hi")
+    CTX->>CTX: append optimistic placeholder (pending=true)
+    CTX->>WS: { type:"dm-send", toUserId, message, clientMsgId }
+    SRV-->>WS: { type:"dm-message", … } (echo + recipient)
+    SRV-->>WS: { type:"dm-ack", id, clientMsgId }
+    WS-->>CTX: useDmRealtime resolves the placeholder
+```
+
+Files:
+- `context/DmContext.tsx` — opens/closes/sends conversations, optimistic placeholders.
+- `hooks/useDmRealtime.ts` — bus subscription that mutates the conversation map.
+- `api/dm.ws.ts` — `sendDmWs`, `fetchDmHistory`, `fetchDmPartners` (all WebSocket, no REST).
+- `components/dm/` — `DmPanel`, `DmMessageList`, `DmComposer`, `DmTabs`.
+- `components/friends/FriendContextMenu.tsx` — right-click on a friend → *Send a message* / *Remove*.
+
+Friend removal is **bilateral** (single row in the server's `friends` store) and the other party is notified live via `friend-removed` over the same auth-keyed WS registry — no refresh required.
 
 ## Scripts
 

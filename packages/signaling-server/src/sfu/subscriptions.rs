@@ -8,6 +8,7 @@
 use std::sync::Arc;
 
 use dashmap::{DashMap, DashSet};
+use tokio::sync::mpsc;
 
 use super::broadcast::serialize_message;
 use super::models::ServerMessage;
@@ -24,12 +25,40 @@ pub struct Subscriptions {
     /// Reverse index: which servers a user is subscribed to. Used to
     /// broadcast presence on disconnect without scanning every server.
     pub user_to_servers: DashMap<String, DashSet<String>>,
+    /// Authenticated WebSocket connections, keyed by `auth_user_id`.
+    /// Populated at `Authenticate`, cleared on socket close. This is the
+    /// canonical sink for any auth-scoped push (friend requests, DMs,
+    /// channel/server subscriptions) — `state.peers` is voice-only and
+    /// would silently drop notifications outside of voice rooms.
+    pub connections: DashMap<String, mpsc::Sender<String>>,
 }
 
 impl Subscriptions {
     #[inline]
     pub fn new() -> Arc<Self> {
         Arc::new(Self::default())
+    }
+
+    /// Binds an authenticated user to its WS sender. Replaces any previous
+    /// binding (typically a stale ghost connection).
+    pub fn bind_user(&self, user_id: &str, tx: mpsc::Sender<String>) {
+        self.connections.insert(user_id.to_string(), tx);
+    }
+
+    /// Drops the WS binding for a user.
+    pub fn unbind_user(&self, user_id: &str) {
+        self.connections.remove(user_id);
+    }
+
+    /// Pushes a pre-serialized JSON payload to `user_id`'s WS, accounting
+    /// drops in the `WS_QUEUE_DROPPED` Prometheus counter. No-op if the
+    /// user is not currently connected.
+    pub fn send_to_user(&self, user_id: &str, payload: &str) {
+        if let Some(entry) = self.connections.get(user_id) {
+            if entry.value().try_send(payload.to_string()).is_err() {
+                WS_QUEUE_DROPPED.inc();
+            }
+        }
     }
 
     pub fn subscribe_channel(&self, channel_id: &str, user_id: &str) {
@@ -102,6 +131,10 @@ impl Subscriptions {
 }
 
 /// Pushes `message` to every subscriber of `channel_id`, except `exclude`.
+///
+/// Routes via the auth-keyed `connections` registry so that subscribers
+/// receive the push even when they are not in a voice room (the legacy
+/// `state.peers` map covers voice only).
 pub async fn push_to_channel_subscribers(
     state: &Arc<AppState>,
     channel_id: &str,
@@ -113,19 +146,11 @@ pub async fn push_to_channel_subscribers(
         None => return,
     };
     let subs = state.subscriptions.channel_subscribers_snapshot(channel_id);
-    if subs.is_empty() {
-        return;
-    }
-    let peers = state.peers.read().await;
     for uid in subs {
         if exclude == Some(uid.as_str()) {
             continue;
         }
-        if let Some(peer) = peers.get(&uid) {
-            if peer.tx.try_send(payload.clone()).is_err() {
-                WS_QUEUE_DROPPED.inc();
-            }
-        }
+        state.subscriptions.send_to_user(&uid, &payload);
     }
 }
 
@@ -141,18 +166,10 @@ pub async fn push_to_server_subscribers(
         None => return,
     };
     let subs = state.subscriptions.server_subscribers_snapshot(server_id);
-    if subs.is_empty() {
-        return;
-    }
-    let peers = state.peers.read().await;
     for uid in subs {
         if exclude == Some(uid.as_str()) {
             continue;
         }
-        if let Some(peer) = peers.get(&uid) {
-            if peer.tx.try_send(payload.clone()).is_err() {
-                WS_QUEUE_DROPPED.inc();
-            }
-        }
+        state.subscriptions.send_to_user(&uid, &payload);
     }
 }

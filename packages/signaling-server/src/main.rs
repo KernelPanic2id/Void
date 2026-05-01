@@ -73,6 +73,7 @@ async fn main() {
     let app_state = Arc::new(AppState {
         peers: RwLock::new(HashMap::new()),
         chat_history: RwLock::new(HashMap::new()),
+        dm_history: RwLock::new(HashMap::new()),
         server_registry,
         sfu: sfu.clone(),
         auth_store: auth_store.clone(),
