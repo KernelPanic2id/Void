@@ -96,7 +96,7 @@ jobs:
         run: pnpm exec tsc --noEmit
       - name: Vitest (non-interactive)
         working-directory: apps/desktop
-        run: pnpm test --run
+        run: pnpm run test:run
   # ─────────────────────────────────────────────────────────────────────────
   # WASM build (sanity-check that core-wasm still compiles for the browser).
   # ─────────────────────────────────────────────────────────────────────────
