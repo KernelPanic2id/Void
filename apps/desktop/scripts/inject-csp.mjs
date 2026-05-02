@@ -26,9 +26,25 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONF_PATH = resolve(__dirname, "..", "src-tauri", "tauri.conf.json");
 
-/** Default origins always allowed (local dev + updater). */
+/**
+ * Default origins always allowed:
+ * - `'self'`            → app shell.
+ * - `localhost:8080`    → local dev signaling server.
+ * - `github.com`        → updater (GitHub Releases JSON + binaries).
+ * - `ipc:` / `http(s)://ipc.localhost` / `tauri://localhost` → Tauri v2 IPC
+ *   custom protocols. The webview MUST be allowed to fetch these schemes,
+ *   otherwise EVERY `invoke()` call is blocked by CSP and the app silently
+ *   loses access to native commands (identity restore, updater check, etc.).
+ *   Symptom: user is dropped on the login screen with `find_identity_by_pubkey`
+ *   refused, then auto-login fails and voice channels show the user alone.
+ */
 const STATIC_ORIGINS = [
     "'self'",
+    "ipc:",
+    "http://ipc.localhost",
+    "https://ipc.localhost",
+    "tauri://localhost",
+    "https://tauri.localhost",
     "ws://localhost:8080",
     "http://localhost:8080",
     "https://github.com",
