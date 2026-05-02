@@ -39,13 +39,20 @@ pub(super) fn build_rtc_config(ice_servers: &[String]) -> RTCConfiguration {
 
 /// Handles an incoming SDP offer for `peer_id`.
 ///
-/// Order of operations:
-/// 1. Build PC, install `on_ice_candidate` and `on_track` callbacks.
-/// 2. `set_remote_description(offer)` â†’ `create_answer` â†’ `set_local_description(answer)`.
-/// 3. Deliver the answer to the peer immediately (unblocks polite clients).
-/// 4. Run `catchup_existing_tracks` which adds existing forwarders' tracks
-///    to the new PC and triggers a *separate* renegotiation cycle. Because
-///    the answer is already in flight, this never collides with step 2.
+/// Two paths:
+/// * **Bootstrap** (no PC yet): build the PC, install `on_ice_candidate`,
+///   `on_track`, `on_data_channel`, set the remote offer, answer, persist
+///   the PC, deliver the answer, and run `catchup_existing_tracks` to add
+///   already-published forwarders.
+/// * **Renegotiation** (PC already exists): reuse the live PC and just
+///   apply `set_remote_description(offer)` → `create_answer` →
+///   `set_local_description(answer)` → deliver. This is critical: the
+///   client renegotiates whenever it adds/removes a track (mute toggle,
+///   screen-share start/stop). Tearing down the PC each time would drop
+///   every forwarder previously plugged in by `catchup_existing_tracks`,
+///   silently isolating peers mid-call.
+///
+/// The answer is always sent before any catch-up to unblock polite clients.
 pub(crate) async fn handle_offer(
     inner: Arc<SfuInner>,
     peer_id: PeerId,
@@ -67,6 +74,28 @@ pub(crate) async fn handle_offer(
         .clone()
         .ok_or_else(|| SfuError::PeerNotInRoom(peer_id.as_arc()))?;
 
+    // ---- Renegotiation fast-path: reuse the existing PC ----
+    {
+        let existing = peer_entry.peer_connection.lock().await.clone();
+        if let Some(pc) = existing {
+            let session = RTCSessionDescription::offer(sdp_str)
+                .map_err(|e| SfuError::InvalidSdp(e.to_string()))?;
+            pc.set_remote_description(session).await?;
+            let answer = pc.create_answer(None).await?;
+            pc.set_local_description(answer.clone()).await?;
+            let answer_sdp = answer.sdp.clone();
+            if let Err(e) = peer_entry
+                .sink
+                .deliver(&peer_id, Outbound::Answer { sdp: answer_sdp })
+                .await
+            {
+                warn!("sink delivery (answer/reneg) failed for {}: {:?}", peer_id, e);
+            }
+            return Ok(());
+        }
+    }
+
+    // ---- Bootstrap path: build a fresh PC ----
     let pc = Arc::new(
         inner
             .api

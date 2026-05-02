@@ -50,6 +50,9 @@ fn epoch_ms() -> u64 {
 /// 2. Check `accepted` friendship — refuses with [`ApiError::Forbidden`].
 /// 3. Persist into the ring buffer (capped at [`DM_HISTORY_CAP`] per pair).
 /// 4. Push [`ServerMessage::DmMessage`] to both peers (recipient + echo).
+///    The echo to the sender carries `client_msg_id` so the UI can resolve
+///    its optimistic placeholder deterministically; the recipient receives
+///    a payload without that field (it is meaningless to them).
 ///
 /// Returns the persisted [`DmEntry`] so callers can also send a structured
 /// ACK back to the sender via [`ServerMessage::DmAck`].
@@ -58,6 +61,7 @@ pub async fn send_dm(
     from_user_id: &str,
     to_user_id: &str,
     message: String,
+    client_msg_id: Option<String>,
 ) -> Result<DmEntry, ApiError> {
     let trimmed = message.trim();
     if trimmed.is_empty() {
@@ -94,15 +98,28 @@ pub async fn send_dm(
         buf.push_back(entry.clone());
     }
 
-    let payload = ServerMessage::DmMessage {
+    // Recipient payload: no `client_msg_id` (sender's correlation token).
+    let recipient_payload = ServerMessage::DmMessage {
         id: entry.id.clone(),
         from_user_id: entry.from_user_id.clone(),
         to_user_id: entry.to_user_id.clone(),
         message: entry.message.clone(),
         timestamp: entry.timestamp,
+        client_msg_id: None,
     };
-    notify_user(state, to_user_id, &payload).await;
-    notify_user(state, from_user_id, &payload).await;
+    notify_user(state, to_user_id, &recipient_payload).await;
+
+    // Sender echo: include the correlation id so the UI replaces the
+    // optimistic placeholder instead of appending a duplicate bubble.
+    let sender_payload = ServerMessage::DmMessage {
+        id: entry.id.clone(),
+        from_user_id: entry.from_user_id.clone(),
+        to_user_id: entry.to_user_id.clone(),
+        message: entry.message.clone(),
+        timestamp: entry.timestamp,
+        client_msg_id,
+    };
+    notify_user(state, from_user_id, &sender_payload).await;
 
     Ok(entry)
 }

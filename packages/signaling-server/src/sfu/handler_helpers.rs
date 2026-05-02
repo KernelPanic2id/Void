@@ -79,7 +79,7 @@ pub async fn handle_dm_send(
         return;
     };
 
-    match dm::send_dm(state, uid, &to_user_id, message).await {
+    match dm::send_dm(state, uid, &to_user_id, message, client_msg_id.clone()).await {
         Ok(entry) => {
             let ack = ServerMessage::DmAck {
                 id: entry.id,

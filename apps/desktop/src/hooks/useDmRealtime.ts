@@ -10,9 +10,13 @@ export interface UseDmRealtimeProps {
     selfUserId: string | null;
     /**
      * Called when a DM is received from a peer for which no conversation
-     * is currently open — lets the host context lazy-open a tab.
+     * is currently open — lets the host context lazy-open a tab. The full
+     * message is forwarded so the host can append it immediately to the
+     * freshly created conversation (otherwise the message would be lost
+     * until the user manually opens the DM, which is the regression where
+     * incoming DMs were no longer instantaneous).
      */
-    onUnknownPeer?: (peerId: string) => void;
+    onUnknownPeer?: (peerId: string, message: DmMessage) => void;
 }
 
 /**
@@ -33,15 +37,34 @@ export function useDmRealtime({
             setConversations((prev) => {
                 const _existing = prev[_peerId];
                 if (!_existing) {
-                    onUnknownPeer?.(_peerId);
+                    // Forward the message to the host so it can lazy-open the
+                    // tab AND surface the incoming DM in the same tick.
+                    onUnknownPeer?.(_peerId, msg);
                     return prev;
                 }
                 if (_existing.messages.some((m) => m.id === msg.id)) return prev;
 
-                // Replace the optimistic placeholder if its clientMsgId matches.
-                const _placeholderIdx = _existing.messages.findIndex(
-                    (m) => m.pending && m.clientMsgId && m.clientMsgId === (msg as DmMessage).clientMsgId,
-                );
+                // Resolve the optimistic placeholder. Preferred path:
+                // server echoes back our `clientMsgId`. Fallback (current
+                // server contract does NOT propagate clientMsgId on the
+                // `dm-message` echo, only on `dm-ack`): for our own echoes
+                // match the most recent pending placeholder with the same
+                // body — prevents the duplicate-message regression on the
+                // sender side until the backend gains an echoed clientMsgId.
+                let _placeholderIdx = msg.clientMsgId
+                    ? _existing.messages.findIndex(
+                        (m) => m.pending && m.clientMsgId && m.clientMsgId === msg.clientMsgId,
+                    )
+                    : -1;
+                if (_placeholderIdx < 0 && msg.fromUserId === selfUserId) {
+                    for (let _i = _existing.messages.length - 1; _i >= 0; _i--) {
+                        const _m = _existing.messages[_i];
+                        if (_m.pending && _m.fromUserId === selfUserId && _m.message === msg.message) {
+                            _placeholderIdx = _i;
+                            break;
+                        }
+                    }
+                }
                 let _next: DmMessage[];
                 if (_placeholderIdx >= 0) {
                     _next = [..._existing.messages];
@@ -79,4 +102,3 @@ export function useDmRealtime({
         };
     }, [setConversations, selfUserId, onUnknownPeer]);
 }
-

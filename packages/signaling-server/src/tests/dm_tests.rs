@@ -80,7 +80,7 @@ async fn send_dm_fans_out_to_both_peers_and_persists_history() {
     let mut alice_rx = bind(&state, "alice");
     let mut bob_rx = bind(&state, "bob");
 
-    let entry = dm::send_dm(&state, "alice", "bob", "hi bob".into())
+    let entry = dm::send_dm(&state, "alice", "bob", "hi bob".into(), Some("c-1".into()))
         .await
         .expect("send ok");
 
@@ -96,6 +96,12 @@ async fn send_dm_fans_out_to_both_peers_and_persists_history() {
         assert_eq!(v["id"], entry.id);
     }
 
+    // Sender's echo carries the correlation id; recipient's payload omits it.
+    let alice_v: serde_json::Value = serde_json::from_str(&alice_payload).unwrap();
+    let bob_v: serde_json::Value = serde_json::from_str(&bob_payload).unwrap();
+    assert_eq!(alice_v["clientMsgId"], "c-1");
+    assert!(bob_v.get("clientMsgId").is_none());
+
     // History queryable from either side.
     let alice_hist = dm::dm_history(&state, "alice", "bob").await.unwrap();
     let bob_hist = dm::dm_history(&state, "bob", "alice").await.unwrap();
@@ -108,7 +114,7 @@ async fn send_dm_fans_out_to_both_peers_and_persists_history() {
 async fn send_dm_rejects_non_friends() {
     let state = build_state(&["alice", "bob"], &[]);
     let _ = bind(&state, "alice");
-    let err = dm::send_dm(&state, "alice", "bob", "spam".into())
+    let err = dm::send_dm(&state, "alice", "bob", "spam".into(), None)
         .await
         .expect_err("must be forbidden");
     assert!(matches!(err, crate::errors::ApiError::Forbidden(_)));
@@ -118,7 +124,7 @@ async fn send_dm_rejects_non_friends() {
 async fn send_dm_rejects_pending_friendship() {
     // Pending requests are not yet "accepted" — DM must be gated.
     let state = build_state(&["alice", "bob"], &[("f1", "alice", "bob", "pending")]);
-    let err = dm::send_dm(&state, "alice", "bob", "hi".into())
+    let err = dm::send_dm(&state, "alice", "bob", "hi".into(), None)
         .await
         .expect_err("must be forbidden");
     assert!(matches!(err, crate::errors::ApiError::Forbidden(_)));

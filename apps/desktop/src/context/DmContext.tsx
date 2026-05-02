@@ -11,6 +11,7 @@ import { DmContextValue } from '../models/social/dmContextValue.model';
 import { DmMessage } from '../models/social/dmMessage.model';
 import { fetchDmHistory, sendDmWs } from '../api/dm.ws';
 import { useAuth } from './AuthContext';
+import { useFriends } from './FriendsContext';
 import { useDmRealtime } from '../hooks/useDmRealtime';
 
 const DmContext = createContext<DmContextValue | undefined>(undefined);
@@ -28,12 +29,47 @@ const _newClientMsgId = (): string =>
  */
 export const DmProvider = ({ children }: { children: ReactNode }) => {
     const { userId } = useAuth();
+    const { friends } = useFriends();
     const [conversations, setConversations] = useState<Record<string, DmConversation>>({});
     const [activePeerId, setActivePeerId] = useState<string | null>(null);
+
+    /**
+     * Lazy-opens a conversation when an inbound DM arrives from a peer
+     * that has no tab yet. Without this the message would be dropped by
+     * `useDmRealtime` until the user manually clicks the friend — which
+     * is the "DMs no longer instantaneous" regression. Peer metadata is
+     * resolved from the friends list; an unknown sender falls back to a
+     * minimal stub keyed on the user id.
+     */
+    const handleUnknownPeer = useCallback(
+        (peerId: string, message: DmMessage) => {
+            const _friend = friends.find((f) => f.id === peerId);
+            const _peer: UserSummary = _friend ?? {
+                id: peerId,
+                username: peerId.slice(0, 8),
+                displayName: peerId.slice(0, 8),
+                avatar: null,
+                publicKey: null,
+            };
+            setConversations((prev) => {
+                if (prev[peerId]) return prev;
+                return {
+                    ...prev,
+                    [peerId]: {
+                        peer: _peer,
+                        messages: [{ ...message, pending: false }],
+                        loading: false,
+                    },
+                };
+            });
+        },
+        [friends],
+    );
 
     useDmRealtime({
         setConversations,
         selfUserId: userId,
+        onUnknownPeer: handleUnknownPeer,
     });
 
     const openDm = useCallback(async (peer: UserSummary) => {

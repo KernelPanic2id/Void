@@ -248,6 +248,9 @@ pub enum ServerMessage {
 
     /// Direct message delivery — pushed to both the recipient and the
     /// sender (echo). Persisted in `state.dm_history` until process exit.
+    /// `client_msg_id` is forwarded only on the sender's echo so the UI
+    /// can deterministically resolve its optimistic placeholder without
+    /// resorting to body-based heuristics.
     #[serde(rename_all = "camelCase")]
     DmMessage {
         id: String,
@@ -255,6 +258,8 @@ pub enum ServerMessage {
         to_user_id: String,
         message: String,
         timestamp: u64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        client_msg_id: Option<String>,
     },
 
     /// Acknowledges a [`ClientMessage::DmSend`] so the sender's UI can

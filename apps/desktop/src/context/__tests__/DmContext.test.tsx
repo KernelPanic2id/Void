@@ -21,6 +21,11 @@ vi.mock('../../context/AuthContext', () => ({
     useAuth: () => ({ userId: 'me' }),
 }));
 
+// FriendsContext is consumed by DmProvider for unknown-peer lookups.
+vi.mock('../../context/FriendsContext', () => ({
+    useFriends: () => ({ friends: [] }),
+}));
+
 // Replace the realtime hook by a deterministic stub that exposes its
 // `setConversations` setter so the test can drive bus events manually.
 let _setConvsFromHook: React.Dispatch<React.SetStateAction<Record<string, unknown>>> | null = null;

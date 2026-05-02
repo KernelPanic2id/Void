@@ -114,11 +114,19 @@ export function useSfuConnection({
         pc.onnegotiationneeded = async () => {
             try {
                 makingOfferRef.current = true;
-                // setLocalDescription() with no args lets the browser pick the
-                // right SDP (offer/answer/rollback) given the current state.
-                await pc.setLocalDescription();
-                if (pc.localDescription) {
-                    sendSignal({ type: 'offer', sdp: pc.localDescription } as any);
+                // Explicit createOffer + setLocalDescription(desc): the implicit
+                // form (`setLocalDescription()` with no arg) silently no-ops in
+                // some Tauri WebView builds, leaving `localDescription` null and
+                // never emitting an offer — which is exactly the "everyone is
+                // isolated, no audio flows" symptom reported on join.
+                const _offer = await pc.createOffer();
+                await pc.setLocalDescription(_offer);
+                // Wire format: send raw SDP string. The SFU's `extract_sdp`
+                // (signaling-server) reads `msg.sdp` as a string; sending the
+                // full RTCSessionDescription object would JSON-serialize to
+                // `{type, sdp}` and break parsing on the server side.
+                if (_offer.sdp) {
+                    sendSignal({ type: 'offer', sdp: _offer.sdp } as any);
                 }
             } catch (err) {
                 console.error('RTC negotiation error:', err);
@@ -238,9 +246,11 @@ export function useSfuConnection({
                     } else {
                         await _pc.setRemoteDescription(_offerInit);
                     }
-                    await _pc.setLocalDescription();
-                    if (_pc.localDescription) {
-                        sendSignal({ type: 'answer', sdp: _pc.localDescription } as any);
+                    const _answer = await _pc.createAnswer();
+                    await _pc.setLocalDescription(_answer);
+                    // Send raw SDP string (see comment in onnegotiationneeded).
+                    if (_answer.sdp) {
+                        sendSignal({ type: 'answer', sdp: _answer.sdp } as any);
                     }
                     break;
                 }
