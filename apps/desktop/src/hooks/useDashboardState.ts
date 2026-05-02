@@ -11,7 +11,13 @@ import { Server } from "../models/server/server.model";
  * Provides state and callbacks for the authenticated main view.
  */
 export function useDashboardState() {
-    const { isAuthenticated, login, logout, recover, username, userId } = useAuth();
+    // `userId` exposed by `useAuth` is the local Ed25519 public key — useful
+    // for local crypto, but the signaling server keys every member by its
+    // server-side UUID (`serverUserId`). Passing the pubkey to the voice
+    // pipeline makes the SFU silently reject the `join` frame, leaving the
+    // user alone in the channel (`sfu_active_peers=0`). Always feed the
+    // server UUID to the voice context.
+    const { isAuthenticated, login, logout, recover, username, userId, serverUserId } = useAuth();
     const { servers, activeServerId, createChannel, deleteChannel, deleteServer, isOwner: checkOwner } = useServer();
     const voice = useVoiceStore();
     const updater = useTauriUpdater();
@@ -21,10 +27,10 @@ export function useDashboardState() {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     useEffect(() => {
-        if (isAuthenticated && username && userId) {
-            voice.setUserInfo(username, userId);
+        if (isAuthenticated && username && serverUserId) {
+            voice.setUserInfo(username, serverUserId);
         }
-    }, [isAuthenticated, username, userId]);
+    }, [isAuthenticated, username, serverUserId]);
 
     useEffect(() => {
         setActiveChannelId(null);

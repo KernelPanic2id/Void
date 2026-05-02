@@ -17,7 +17,10 @@ import DmTabs from './DmTabs';
  */
 export const DmPanel = () => {
     const { conversations, activePeerId, focusDm, closeDm, sendDm } = useDm();
-    const { userId } = useAuth();
+    // Use the server-side UUID so `DmMessageList` can correctly tell apart
+    // outgoing vs. incoming bubbles — DM payloads use server UUIDs, not the
+    // local Ed25519 public key exposed as `userId`.
+    const { serverUserId } = useAuth();
 
     const { x, y, w, h, onMove, onResize } = useBentoLayout('dm-panel');
     const handleDragStart = useBentoDrag(onMove);
@@ -84,7 +87,7 @@ export const DmPanel = () => {
                         ) : (
                             <DmMessageList
                                 messages={_active.messages}
-                                selfUserId={userId}
+                                selfUserId={serverUserId}
                             />
                         )}
                     </div>
