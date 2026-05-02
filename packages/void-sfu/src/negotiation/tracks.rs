@@ -19,6 +19,8 @@ use tokio::sync::mpsc;
 use tracing::{debug, warn};
 use webrtc::rtp::packet::Packet;
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
+use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::TrackLocal;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 
@@ -170,10 +172,22 @@ async fn attach_destinations_to_existing_members(
         let Some(other_pc) = pc_opt else { continue };
 
         if let Err(e) = other_pc
-            .add_track(dest_track as Arc<dyn TrackLocal + Send + Sync>)
+            .add_transceiver_from_track(
+                Arc::clone(&dest_track) as Arc<dyn TrackLocal + Send + Sync>,
+                Some(RTCRtpTransceiverInit {
+                    direction: RTCRtpTransceiverDirection::Sendonly,
+                    send_encodings: Vec::new(),
+                }),
+            )
             .await
         {
-            warn!("add_track to {} failed: {:?}", member, e);
+            // See the matching comment in catchup.rs: `add_track` would
+            // silently reuse a recvonly transceiver in webrtc-rs and emit a
+            // renegotiation offer without the new m-line, isolating peers.
+            warn!(
+                "add_transceiver_from_track to {} failed: {:?}",
+                member, e
+            );
             continue;
         }
 

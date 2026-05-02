@@ -13,6 +13,7 @@ import { fetchDmHistory, sendDmWs } from '../api/dm.ws';
 import { useAuth } from './AuthContext';
 import { useFriends } from './FriendsContext';
 import { useDmRealtime } from '../hooks/useDmRealtime';
+import { useDmNotifications } from '../hooks/useDmNotifications';
 
 const DmContext = createContext<DmContextValue | undefined>(undefined);
 
@@ -70,6 +71,15 @@ export const DmProvider = ({ children }: { children: ReactNode }) => {
         setConversations,
         selfUserId: userId,
         onUnknownPeer: handleUnknownPeer,
+    });
+
+    // Surface a toast whenever an inbound DM cannot be read in-place
+    // (panel closed or focused on another conversation).
+    useDmNotifications({
+        selfUserId: userId,
+        conversations,
+        activePeerId,
+        friends,
     });
 
     const openDm = useCallback(async (peer: UserSummary) => {

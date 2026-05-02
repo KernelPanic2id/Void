@@ -10,10 +10,11 @@
 //! once with all of them at the same time.
 
 use std::sync::Arc;
-use std::time::Duration;
 
 use tracing::{debug, warn};
 use webrtc::rtp_transceiver::rtp_codec::RTCRtpCodecCapability;
+use webrtc::rtp_transceiver::rtp_transceiver_direction::RTCRtpTransceiverDirection;
+use webrtc::rtp_transceiver::RTCRtpTransceiverInit;
 use webrtc::track::track_local::TrackLocal;
 use webrtc::track::track_local::track_local_static_rtp::TrackLocalStaticRTP;
 
@@ -106,10 +107,20 @@ pub(super) async fn catchup_existing_tracks(
             .insert(peer_id.clone(), Arc::clone(&dest_track));
 
         if let Err(e) = pc
-            .add_track(dest_track as Arc<dyn TrackLocal + Send + Sync>)
+            .add_transceiver_from_track(
+                Arc::clone(&dest_track) as Arc<dyn TrackLocal + Send + Sync>,
+                Some(RTCRtpTransceiverInit {
+                    direction: RTCRtpTransceiverDirection::Sendonly,
+                    send_encodings: Vec::new(),
+                }),
+            )
             .await
         {
-            warn!("catchup add_track failed: {:?}", e);
+            // Falling back to add_track here would silently reuse a recvonly
+            // transceiver in some webrtc-rs paths, producing a renegotiation
+            // offer with no new m-line — exactly the "peers see each other
+            // but hear nothing" symptom. We surface the error instead.
+            warn!("catchup add_transceiver_from_track failed: {:?}", e);
         }
     }
 
@@ -148,15 +159,12 @@ pub(super) async fn catchup_existing_tracks(
     }
 
     // Single renegotiation offer covering all just-added tracks and data
-    // channels. Spawned to avoid blocking the caller â€” but ordered AFTER
-    // the original answer so polite clients are in `stable` when this
-    // offer arrives.
+    // channels. Spawned to avoid blocking the caller while keeping ordering
+    // through the per-peer outbound mpsc: the answer was already enqueued
+    // upstream, so a polite client always receives it before this offer.
     let sink = Arc::clone(&peer_entry.sink);
     let peer_id_clone = peer_id.clone();
     tokio::spawn(async move {
-        // Tiny grace delay to maximise the probability that the answer is
-        // applied client-side; not load-bearing for correctness.
-        tokio::time::sleep(Duration::from_millis(0)).await;
         spawn_renegotiation_offer(pc, sink, peer_id_clone).await;
     });
 

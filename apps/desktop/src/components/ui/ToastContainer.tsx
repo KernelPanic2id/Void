@@ -1,5 +1,5 @@
 import { useToast } from '../../context/ToastContext';
-import { UserPlus, UserMinus, Info, CheckCircle, AlertTriangle } from 'lucide-react';
+import { UserPlus, UserMinus, Info, CheckCircle, AlertTriangle, MessageCircle } from 'lucide-react';
 
 const iconMap = {
     join: <UserPlus size={14} className="text-cyan-400" />,
@@ -7,6 +7,7 @@ const iconMap = {
     info: <Info size={14} className="text-purple-400" />,
     success: <CheckCircle size={14} className="text-emerald-400" />,
     error: <AlertTriangle size={14} className="text-red-400" />,
+    dm: <MessageCircle size={14} className="text-fuchsia-400" />,
 };
 
 const borderMap = {
@@ -15,6 +16,7 @@ const borderMap = {
     info: 'border-l-purple-500',
     success: 'border-l-emerald-500',
     error: 'border-l-red-500',
+    dm: 'border-l-fuchsia-500',
 };
 
 export const ToastContainer = () => {

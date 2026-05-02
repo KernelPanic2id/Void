@@ -36,11 +36,19 @@ vi.mock('../../hooks/useDmRealtime', () => ({
 }));
 
 import { DmProvider, useDm } from '../../context/DmContext';
+import { ToastProvider } from '../../context/ToastContext';
 import * as dmApi from '../../api/dm.ws';
 import type { DmMessage } from '../../models/social/dmMessage.model';
 
 function wrapper({ children }: { children: React.ReactNode }) {
-    return React.createElement(DmProvider, null, children);
+    // DmProvider now also surfaces inbound DM toasts via `useDmNotifications`,
+    // which depends on ToastProvider. Wrap accordingly so the spec mirrors
+    // the real app composition.
+    return React.createElement(
+        ToastProvider,
+        null,
+        React.createElement(DmProvider, null, children),
+    );
 }
 
 const _alice = {

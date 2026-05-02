@@ -1,3 +1,3 @@
-export type ToastType = 'join' | 'leave' | 'info' | 'success' | 'error';
+export type ToastType = 'join' | 'leave' | 'info' | 'success' | 'error' | 'dm';
 
 

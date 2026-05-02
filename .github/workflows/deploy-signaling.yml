@@ -42,6 +42,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-test-
 
+      - name: Run void-sfu tests
+        run: cargo test -p void-sfu --verbose
+
       - name: Run signaling-server tests
         run: cargo test -p signaling-server --verbose
 
