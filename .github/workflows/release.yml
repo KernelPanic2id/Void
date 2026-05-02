@@ -134,8 +134,8 @@ jobs:
           PRIMARY_PIN_HASH: ${{ secrets.PRIMARY_PIN_HASH }}
           BACKUP_PIN_HASH: ${{ secrets.BACKUP_PIN_HASH }}
         with:
-          tagName: v__VERSION__
-          releaseName: "Void v__VERSION__"
+          tagName: ${{ github.ref_name }}
+          releaseName: "Void ${{ github.ref_name }}"
           releaseBody: "Mise à jour automatique."
           releaseDraft: false
           prerelease: false
