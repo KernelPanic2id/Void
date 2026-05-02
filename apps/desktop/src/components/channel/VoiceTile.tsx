@@ -1,22 +1,29 @@
 import { useEffect, useRef } from 'react';
 import { MicOff, Headphones, Eye, Camera } from 'lucide-react';
 import VoiceTileProps from '../../models/voice/voiceTileProps.model';
+import { VoiceAudioRenderer } from '../stream/VoiceAudioRenderer';
 
 /**
  * Single participant tile in the voice grid.
  * Displays video/screen stream or avatar fallback, with status icons.
+ * Audio for remote peers is routed through a dedicated, hidden `<audio>`
+ * sink so audio-only participants are still audible (the `<video>` element
+ * is unconditionally muted to avoid double playback).
  */
 export const VoiceTile = ({
+    userId,
     username,
     isSpeaking,
     isMuted,
     isDeafened,
     videoStream,
     screenStream,
+    audioStream,
     avatarUrl,
     isLocal,
     isSpotlighted,
     isWatchingSpotlight,
+    localDeafened,
     onClick,
 }: VoiceTileProps) => {
     const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -53,7 +60,11 @@ export const VoiceTile = ({
                     ref={videoRef}
                     autoPlay
                     playsInline
-                    muted={isLocal}
+                    // Always muted: audio is routed via the dedicated
+                    // `<VoiceAudioRenderer>` below to keep audio-only peers
+                    // audible too. Prevents double playback for streams that
+                    // happen to carry both kinds of tracks.
+                    muted
                     className="w-full h-full object-cover"
                 />
             ) : (
@@ -61,6 +72,15 @@ export const VoiceTile = ({
                     initial={_initial}
                     avatarUrl={avatarUrl}
                     isSpeaking={isSpeaking}
+                />
+            )}
+
+            {/* Hidden audio sink for remote participants. */}
+            {!isLocal && audioStream && (
+                <VoiceAudioRenderer
+                    stream={audioStream}
+                    muted={localDeafened}
+                    peerId={userId}
                 />
             )}
 

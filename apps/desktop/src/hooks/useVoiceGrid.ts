@@ -59,10 +59,13 @@ export function useVoiceGrid({
                 isDeafened: p.isDeafened ?? false,
                 videoStream: _isLocal ? localStream : (remoteVideoStreams.get(p.userId) ?? null),
                 screenStream: _screenStream,
+                // Remote audio sink: never the local user (avoids mic echo).
+                audioStream: _isLocal ? null : (remoteStreams.get(p.userId) ?? null),
                 avatarUrl: _avatarUrl,
                 isLocal: _isLocal,
                 isSpotlighted: spotlightUserId === p.userId,
                 isWatchingSpotlight: spotlightUserId !== null && spotlightUserId !== p.userId,
+                localDeafened: isDeafened,
             };
         });
     }, [participants, localUserId, localUsername, localStream, localScreenStream, remoteStreams, remoteVideoStreams, speakingUsers, voiceAvatar, spotlightUserId, channelId, isMuted, isDeafened]);

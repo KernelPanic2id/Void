@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import VoiceAudioRendererProps from '../../models/voice/voiceAudioRendererProps.model';
 import { useVoiceStore } from '../../context/VoiceContext';
 
-export const VoiceAudioRenderer = ({ stream, muted, peerId }: VoiceAudioRendererProps & { peerId: string }) => {
+export const VoiceAudioRenderer = ({ stream, muted, peerId }: VoiceAudioRendererProps) => {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const { userVolumes } = useVoiceStore();
     const volume = userVolumes.get(peerId) ?? 1;
