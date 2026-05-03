@@ -17,6 +17,7 @@ services:
     environment:
       - RUST_LOG=info
       - JWT_SECRET=${JWT_SECRET}
+      - PUBLIC_IP=${PUBLIC_IP}
     healthcheck:
       test: ["CMD", "curl", "-fk", "https://localhost:3001/health"]
       interval: 30s
