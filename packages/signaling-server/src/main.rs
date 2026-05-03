@@ -140,18 +140,22 @@ async fn main() {
         .layer(TraceLayer::new_for_http());
 
     let addr: SocketAddr = match format!("0.0.0.0:{}", port).parse() {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!("Invalid bind address: {:?}", e);
-            std::process::exit(1);
-        }
-    };
+            Ok(a) => a,
+            Err(e) => {
+                eprintln!("Invalid bind address: {:?}", e);
+                std::process::exit(1);
+            }
+        };
 
-    if is_dev {
+        // On utilise le même serveur HTTP simple pour DEV et PROD.
+        // En PROD, Nginx (port 443) réceptionne le HTTPS et le "traduit" en HTTP
+        // vers notre port 3001.
         println!(
-            "🔧 DEV MODE: SFU Server running on http://{} | UDP Range: 10000-20000",
-            addr
+            "🚀 SFU Server running on http://{} | Mode: {} | UDP: 10000-20000",
+            addr,
+            if is_dev { "DEVELOPMENT" } else { "PRODUCTION" }
         );
+
         let listener = match tokio::net::TcpListener::bind(addr).await {
             Ok(l) => l,
             Err(e) => {
@@ -159,6 +163,7 @@ async fn main() {
                 std::process::exit(1);
             }
         };
+
         if let Err(e) = axum::serve(
             listener,
             app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -168,31 +173,7 @@ async fn main() {
             eprintln!("Server error: {:?}", e);
             std::process::exit(1);
         }
-    } else {
-        let tls_config =
-            match RustlsConfig::from_pem_file(PathBuf::from("cert.pem"), PathBuf::from("key.pem"))
-                .await
-            {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("Failed to load cert.pem/key.pem: {:?}", e);
-                    std::process::exit(1);
-                }
-            };
-
-        println!(
-            "PROD MODE: SFU Server running on https://{} | UDP Range: 10000-20000",
-            addr
-        );
-        if let Err(e) = axum_server::bind_rustls(addr, tls_config)
-            .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-            .await
-        {
-            eprintln!("Server error: {:?}", e);
-            std::process::exit(1);
-        }
     }
-}
 
 /// Builds a webrtc-rs `API` with default codecs, default interceptors,
 /// and an ephemeral UDP port range of 10000..=20000.
