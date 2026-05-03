@@ -1,6 +1,7 @@
 pub mod identity;
 pub mod layout;
 pub mod tls;
+pub mod webview_perms;
 
 use std::sync::Arc;
 
@@ -87,6 +88,12 @@ pub fn run() {
             if let Some(window) = app.get_webview_window("main") {
                 let icon = tauri::include_image!("icons/icon.png");
                 let _ = window.set_icon(icon);
+
+                // Auto-grant mic/camera permission requests issued by the
+                // renderer. Replaces the brittle
+                // `WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` env trick which is
+                // ignored once WebView2 has cached a user-data folder.
+                webview_perms::install_media_auto_grant(&window);
             }
 
             let identity_cache = identity::init_cache(&handle);

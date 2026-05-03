@@ -1452,6 +1452,7 @@ dependencies = [
  "base64 0.22.1",
  "crc32fast",
  "ed25519-dalek",
+ "log",
  "rand 0.8.5",
  "reqwest",
  "rustls",
@@ -1468,6 +1469,8 @@ dependencies = [
  "tauri-utils",
  "tokio",
  "tokio-tungstenite 0.28.0",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]
