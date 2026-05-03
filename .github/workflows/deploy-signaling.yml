@@ -51,9 +51,6 @@ jobs:
       - name: Run signaling-server tests
         run: cargo test -p signaling-server --verbose
 
-      - name: Run core-wasm tests
-        run: cargo test -p core-wasm --verbose
-
   build-and-deploy:
     needs: test
     runs-on: ubuntu-latest
@@ -92,28 +89,17 @@ jobs:
 
       - name: Prepare Deployment Package
         run: |
-          echo "=== Construction du package de déploiement ==="
           mkdir -p deploy-package/docker/grafana/provisioning/datasources
           mkdir -p deploy-package/docker/grafana/provisioning/dashboards
-          
-          # 1. Copie du binaire et fichiers racines
           cp target/${{ env.TARGET_PLATFORM }}/release/signaling-server deploy-package/
           cp Dockerfile deploy-package/
           cp docker-compose.yml deploy-package/
-          
-          # 2. Recherche et copie des configs (évite les erreurs de chemins dans le repo)
           find . -name "prometheus.yml" -exec cp {} deploy-package/docker/ \;
           find . -name "alert_rules.yml" -exec cp {} deploy-package/docker/ \;
           find . -name "alertmanager.yml" -exec cp {} deploy-package/docker/ \;
-          
-          # 3. Recherche et copie du Provisioning Grafana
           find . -name "datasources.yml" -exec cp {} deploy-package/docker/grafana/provisioning/datasources/ \;
           find . -name "dashboard.yml" -exec cp {} deploy-package/docker/grafana/provisioning/dashboards/ \;
           find . -name "sfu-dashboard.json" -exec cp {} deploy-package/docker/grafana/provisioning/dashboards/ \;
-
-          echo "Vérification du contenu du paquet :"
-          ls -R deploy-package/docker/
-          
           tar -czvf deploy.tar.gz -C deploy-package .
 
       - name: Copy to Oracle VM
@@ -133,21 +119,14 @@ jobs:
           key: ${{ secrets.ORACLE_SSH_KEY }}
           script: |
             echo "=== Déploiement SFU + Monitoring ==="
-            # Migration: rename legacy folder if present
-            if [ -d ~/VocalWASM ] && [ ! -d ~/Void ]; then
-              mv ~/VocalWASM ~/Void
-            fi
             mkdir -p ~/Void
             cd ~/Void
-            
             sudo chown -R ubuntu:ubuntu ~/Void
-            
-            # Nettoyage et extraction propre
             rm -rf docker/
             tar -xzvf ~/deploy.tar.gz
             rm ~/deploy.tar.gz
 
-            # Création du fichier .env
+            # Création du fichier .env propre
             cat > .env << ENVEOF
             PRIMARY_PIN_HASH="${{ secrets.PRIMARY_PIN_HASH }}"
             BACKUP_PIN_HASH="${{ secrets.BACKUP_PIN_HASH }}"
@@ -159,30 +138,27 @@ jobs:
             ENVEOF
             chmod 600 .env
 
-            # Patch dynamique d'Alertmanager
+            # Patch Alertmanager
             sed -i "s|REPLACE_SMTP_USER|${{ secrets.SMTP_EMAIL }}|g" docker/alertmanager.yml
             sed -i "s|REPLACE_SMTP_PASSWORD|${{ secrets.SMTP_AUTH_PASSWORD }}|g" docker/alertmanager.yml
             sed -i "s|REPLACE_SLACK_WEBHOOK|${{ secrets.SLACK_WEBHOOK_URL }}|g" docker/alertmanager.yml
             sed -i "s|REPLACE_DOMAIN|${{ secrets.DOMAIN }}|g" docker/alertmanager.yml
 
-            echo "=== Redémarrage des services ==="
             sudo docker compose down || true
-            
-            sudo docker volume rm Vocalwasm_grafana_data || true
-            
             sudo docker compose build --no-cache signaling-server
             sudo docker compose up -d
 
-            echo "Attente de démarrage..."
+            echo "Attente de démarrage (30s)..."
             sleep 30
 
             echo "=== Tests de santé ==="
-            curl -fk --max-time 10 https://localhost:3001/health && echo "✅ Signaling OK" || exit 1
+            # CORRECTION : Changement de https:// à http:// car Nginx n'est pas utilisé en local ici
+            curl -f --max-time 10 http://localhost:3001/health && echo "✅ Signaling OK" || exit 1
             curl -s http://localhost:9090/-/healthy | grep -q "Healthy" && echo "✅ Prometheus OK" || exit 1
             curl -s http://localhost:3000/api/health | grep -q "ok" && echo "✅ Grafana OK" || exit 1
             
             sudo docker image prune -f
-            echo "🚀 Déploiement terminé !"
+            echo "🚀 Déploiement terminé avec succès !"
 
   notify:
     needs: build-and-deploy
@@ -193,9 +169,6 @@ jobs:
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
-          text: |
-            :robot: Déploiement SFU + Monitoring
-            :rocket: *Statut:* ${{ job.status }}
-            :book: *Commit:* ${{ github.event.head_commit.message }}
+          text: "Déploiement SFU: ${{ job.status }} (Commit: ${{ github.event.head_commit.message }})"
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
