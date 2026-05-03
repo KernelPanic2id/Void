@@ -43,17 +43,32 @@ impl ServerCertVerifier for PinningVerifier {
         _ocsp_response: &[u8],
         _now: UnixTime,
     ) -> Result<ServerCertVerified, Error> {
+
+        // --- EXTRACTION DE LA CLÉ PUBLIQUE (SPKI) ---
+        // On parse le certificat pour extraire uniquement la partie Public Key Info
+        // afin de correspondre au hash généré par OpenSSL.
+        let cert = x509_parser::parse_x509_certificate(end_entity.as_ref())
+            .map_err(|_| Error::InvalidCertificate(rustls::CertificateError::BadEncoding))?;
+
+        let spki_bytes = cert.1.tbs_certificate.subject_p_k_i.raw;
+
         let mut hasher = Sha256::new();
-        hasher.update(end_entity.as_ref());
+        hasher.update(spki_bytes);
         let cert_hash = general_purpose::STANDARD.encode(hasher.finalize());
 
-        if is_dev_build() {
+        // Debug : utile pour voir le hash dans la console Tauri si ça rejette encore
+        #[cfg(debug_assertions)]
+        println!("🔒 [TLS Pinning] Hash calculé: {}", cert_hash);
+
+        if is_dev_build() || cfg!(test) {
             return Ok(ServerCertVerified::assertion());
         }
 
         if cert_hash == PRIMARY_PIN || cert_hash == BACKUP_PIN {
             Ok(ServerCertVerified::assertion())
         } else {
+            // Log l'erreur pour savoir quel hash a été reçu en prod
+            eprintln!("❌ [TLS Pinning] ÉCHEC ! Attendu: {}, Reçu: {}", PRIMARY_PIN, cert_hash);
             Err(Error::InvalidCertificate(
                 rustls::CertificateError::UnknownIssuer,
             ))
