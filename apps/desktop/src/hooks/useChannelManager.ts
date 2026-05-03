@@ -1,6 +1,12 @@
 import { useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import UseChannelManagerProps from '../models/voice/useChannelManagerProps.model';
+// Vite emits the wasm-pack binary as a hashed asset and gives us the
+// resolved URL. Hardcoding `/pkg/core_wasm_bg.wasm` 404'd in production
+// (Vite only copies `public/` to `dist/`, never `src/pkg/`), and the SPA
+// fallback returned `index.html` — the worklet then choked on
+// `WebAssembly.instantiate(): expected magic word 00 61 73 6d, found 3c 21 44 4f`.
+import coreWasmUrl from '../pkg/core_wasm_bg.wasm?url';
 
 /**
  * Encapsulates join / leave channel logic including
@@ -50,7 +56,7 @@ export function useChannelManager({
             const _gateNode = new AudioWorkletNode(audioCtx, 'noise-gate-processor');
             noiseGateNodeRef.current = _gateNode;
 
-            const wasmRes = await fetch('/pkg/core_wasm_bg.wasm');
+            const wasmRes = await fetch(coreWasmUrl);
             const wasmBuffer = await wasmRes.arrayBuffer();
 
             let rtSeal: number | null = null;
