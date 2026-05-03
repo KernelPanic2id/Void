@@ -4,8 +4,8 @@
  * Env vars can override (set in .env.development / .env.production).
  */
 
-const PROD_WS = 'wss://89.168.59.45:3001/ws';
-const PROD_API = 'https://89.168.59.45:3001';
+const PROD_WS = 'wss://api.voidsfu.com/ws';
+const PROD_API = 'https://api.voidsfu.com';
 
 export const config = {
   /** WebSocket signaling server URL */
