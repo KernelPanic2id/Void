@@ -27,6 +27,7 @@ use webrtc::api::APIBuilder;
 use webrtc::api::interceptor_registry::register_default_interceptors;
 use webrtc::api::media_engine::MediaEngine;
 use webrtc::api::setting_engine::SettingEngine;
+use webrtc::ice::candidate::CandidateType;
 use webrtc::ice::udp_network::{EphemeralUDP, UDPNetwork};
 use webrtc::interceptor::registry::Registry as InterceptorRegistry;
 
@@ -202,6 +203,13 @@ fn build_webrtc_api() -> Result<webrtc::api::API, webrtc::Error> {
     let mut setting_engine = SettingEngine::default();
     let ephemeral_udp = EphemeralUDP::new(10000, 20000)?;
     setting_engine.set_udp_network(UDPNetwork::Ephemeral(ephemeral_udp));
+
+    // Oracle Cloud (and most IaaS) assigns a public IP via 1:1 NAT.
+    // Without this, host candidates advertise 10.x / 172.x (unreachable)
+    // and the srflx candidate often fails STUN checks behind cloud NAT.
+    if let Ok(ip) = std::env::var("PUBLIC_IP") {
+        setting_engine.set_nat_1to1_ips(vec![ip], CandidateType::Host.into());
+    }
 
     let mut registry = InterceptorRegistry::default();
     registry = register_default_interceptors(registry, &mut m)?;
